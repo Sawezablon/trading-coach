@@ -1,3 +1,5 @@
+"use client";
+
 import { DollarSign, TrendingDown, TrendingUp, UserPlus, Users, Waves } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
