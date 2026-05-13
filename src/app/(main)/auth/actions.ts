@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 
-import { hasSupabaseEnv } from "@/lib/env";
+import { env, hasSupabaseEnv } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type AuthState = {
@@ -63,4 +63,29 @@ export async function logoutAction() {
   const supabase = await createSupabaseServerClient();
   await supabase?.auth.signOut();
   redirect("/auth/v2/login");
+}
+
+export async function googleLoginAction() {
+  if (!hasSupabaseEnv()) {
+    redirect("/auth/v2/login");
+  }
+
+  const supabase = await createSupabaseServerClient();
+
+  if (!supabase) {
+    redirect("/auth/v2/login");
+  }
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${env.appUrl}/auth/callback`,
+    },
+  });
+
+  if (error || !data.url) {
+    redirect("/auth/v2/login");
+  }
+
+  redirect(data.url);
 }
