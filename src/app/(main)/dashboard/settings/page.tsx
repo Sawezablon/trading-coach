@@ -1,4 +1,5 @@
 import { saveRulesAction } from "@/app/(main)/dashboard/settings/actions";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -7,8 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getRules } from "@/lib/data/trades";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ saved?: string; error?: string }>;
+}) {
   const rules = await getRules();
+  const params = await searchParams;
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -18,6 +24,18 @@ export default async function SettingsPage() {
           Define the guardrails TradeGuardian uses to detect discipline breaks.
         </p>
       </div>
+
+      {params.saved ? (
+        <Alert>
+          <AlertDescription>Rules saved.</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {params.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{params.error}</AlertDescription>
+        </Alert>
+      ) : null}
 
       <Card>
         <CardHeader>

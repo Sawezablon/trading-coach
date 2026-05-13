@@ -63,13 +63,27 @@ export async function getRules(): Promise<RuleSettings> {
     return demoRules;
   }
 
-  const { data, error } = await supabase.from("trading_rules").select("*").eq("user_id", user.id).single();
+  const { data, error } = await supabase.from("trading_rules").select("*").eq("user_id", user.id).maybeSingle();
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return data as RuleSettings;
+  if (data) {
+    return data as RuleSettings;
+  }
+
+  const { data: createdRules, error: createError } = await supabase
+    .from("trading_rules")
+    .insert({ user_id: user.id })
+    .select("*")
+    .single();
+
+  if (createError) {
+    throw new Error(createError.message);
+  }
+
+  return createdRules as RuleSettings;
 }
 
 export function getPrimaryAnalysis(trade: TradeWithAnalysis): AiAnalysis | null {

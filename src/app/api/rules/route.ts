@@ -23,17 +23,19 @@ export async function POST(request: Request) {
     .map((session) => session.trim())
     .filter(Boolean);
 
-  const { error } = await supabase.from("trading_rules").upsert({
-    user_id: user.id,
-    max_risk_percent: Number(formData.get("max_risk_percent") ?? 1),
-    min_rr: Number(formData.get("min_rr") ?? 2),
-    allowed_sessions: allowedSessions,
-    confirmation_required:
-      formData.get("confirmation_required") === "on" || formData.get("confirmation_required") === "true",
-    max_trades_per_day: Number(formData.get("max_trades_per_day") ?? 3),
-    notes: String(formData.get("notes") ?? ""),
-    updated_at: new Date().toISOString(),
-  });
+  const { error } = await supabase.from("trading_rules").upsert(
+    {
+      user_id: user.id,
+      max_risk_percent: Number(formData.get("max_risk_percent") ?? 1),
+      min_rr: Number(formData.get("min_rr") ?? 2),
+      allowed_sessions: allowedSessions.length ? allowedSessions : ["London"],
+      confirmation_required:
+        formData.get("confirmation_required") === "on" || formData.get("confirmation_required") === "true",
+      max_trades_per_day: Number(formData.get("max_trades_per_day") ?? 3),
+      notes: String(formData.get("notes") ?? ""),
+    },
+    { onConflict: "user_id" },
+  );
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
