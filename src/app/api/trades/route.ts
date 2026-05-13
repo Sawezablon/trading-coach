@@ -90,12 +90,10 @@ export async function POST(request: Request) {
       contentType: screenshot.type,
     });
 
-    if (uploadError) {
-      return NextResponse.json({ error: uploadError.message }, { status: 400 });
+    if (!uploadError) {
+      const { data } = supabase.storage.from("chart-screenshots").getPublicUrl(path);
+      screenshotUrl = data.publicUrl;
     }
-
-    const { data } = supabase.storage.from("chart-screenshots").getPublicUrl(path);
-    screenshotUrl = data.publicUrl;
   }
 
   const { data: trade, error: tradeError } = await supabase
