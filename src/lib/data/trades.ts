@@ -63,6 +63,15 @@ export async function getRules(): Promise<RuleSettings> {
     return demoRules;
   }
 
+  const { error: profileError } = await supabase.from("profiles").upsert({
+    id: user.id,
+    email: user.email,
+  });
+
+  if (profileError) {
+    throw new Error(profileError.message);
+  }
+
   const { data, error } = await supabase.from("trading_rules").select("*").eq("user_id", user.id).maybeSingle();
 
   if (error) {

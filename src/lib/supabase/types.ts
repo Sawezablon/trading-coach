@@ -57,6 +57,28 @@ export type TradeWithAnalysis = Trade & {
 export type Database = {
   public: {
     Tables: {
+      profiles: {
+        Row: {
+          id: string;
+          email: string | null;
+          full_name: string | null;
+          timezone: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          email?: string | null;
+          full_name?: string | null;
+          timezone?: string;
+        };
+        Update: {
+          email?: string | null;
+          full_name?: string | null;
+          timezone?: string;
+        };
+        Relationships: [];
+      };
       trades: {
         Row: Trade;
         Insert: Partial<Trade> &
