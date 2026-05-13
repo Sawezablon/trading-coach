@@ -28,6 +28,7 @@ export type RuleSettings = {
   allowed_sessions: string[];
   confirmation_required: boolean;
   max_trades_per_day: number;
+  custom_rules: string[];
   notes: string | null;
   created_at: string;
   updated_at: string;

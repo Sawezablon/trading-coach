@@ -22,6 +22,10 @@ export async function POST(request: Request) {
     .split(",")
     .map((session) => session.trim())
     .filter(Boolean);
+  const customRules = String(formData.get("custom_rules") ?? "")
+    .split(/\r?\n/)
+    .map((rule) => rule.trim())
+    .filter(Boolean);
 
   const { error } = await supabase.from("trading_rules").upsert(
     {
@@ -32,6 +36,7 @@ export async function POST(request: Request) {
       confirmation_required:
         formData.get("confirmation_required") === "on" || formData.get("confirmation_required") === "true",
       max_trades_per_day: Number(formData.get("max_trades_per_day") ?? 3),
+      custom_rules: customRules,
       notes: String(formData.get("notes") ?? ""),
     },
     { onConflict: "user_id" },

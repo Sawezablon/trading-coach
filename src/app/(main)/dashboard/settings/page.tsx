@@ -80,6 +80,19 @@ export default async function SettingsPage({
               <Label htmlFor="confirmation_required">Confirmation required before entry</Label>
             </div>
             <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="custom_rules">Your personal rules</Label>
+              <Textarea
+                id="custom_rules"
+                name="custom_rules"
+                defaultValue={(rules.custom_rules ?? []).join("\n")}
+                placeholder={"One rule per line\nExample: No trades before my pre-market checklist is complete"}
+                className="min-h-32"
+              />
+              <p className="text-muted-foreground text-xs">
+                Add one rule per line. TradeGuardian will include these in future AI reviews.
+              </p>
+            </div>
+            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="notes">Rule notes</Label>
               <Textarea id="notes" name="notes" defaultValue={rules.notes ?? ""} />
             </div>

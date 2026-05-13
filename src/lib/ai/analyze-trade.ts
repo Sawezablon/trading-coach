@@ -50,6 +50,7 @@ function mockAnalysis(input: AnalyzeTradeInput): Omit<AiAnalysis, "id" | "create
     improvement_suggestions: [
       "Write the invalidation level before entry",
       "Check risk, session, RR, and confirmation as a final pre-trade gate",
+      ...(input.rules.custom_rules.length ? ["Review your personal rules before taking the next setup"] : []),
     ],
     recurring_mistakes: ruleViolations.slice(0, 3),
     model: "mock",

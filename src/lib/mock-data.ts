@@ -10,6 +10,11 @@ export const demoRules: RuleSettings = {
   allowed_sessions: ["London", "New York"],
   confirmation_required: true,
   max_trades_per_day: 3,
+  custom_rules: [
+    "Only enter after liquidity sweep and confirmation close",
+    "Do not trade within 15 minutes of high-impact news",
+    "Stop trading for the day after two losses",
+  ],
   notes: "Only take A setups after journaling the reason for entry.",
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),

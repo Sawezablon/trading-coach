@@ -27,6 +27,7 @@ create table if not exists public.trading_rules (
   allowed_sessions text[] not null default array['London'],
   confirmation_required boolean not null default true,
   max_trades_per_day integer not null default 3 check (max_trades_per_day > 0),
+  custom_rules text[] not null default '{}',
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
