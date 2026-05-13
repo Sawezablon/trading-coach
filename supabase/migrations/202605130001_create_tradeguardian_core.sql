@@ -10,7 +10,7 @@ begin
 end;
 $$;
 
-create table if not exists public.profiles (
+create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
   full_name text,
@@ -19,7 +19,7 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.trading_rules (
+create table public.trading_rules (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
   max_risk_percent numeric(5,2) not null default 1.00 check (max_risk_percent > 0),
@@ -33,7 +33,7 @@ create table if not exists public.trading_rules (
   constraint trading_rules_user_unique unique (user_id)
 );
 
-create table if not exists public.trades (
+create table public.trades (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
   pair text not null,
@@ -50,7 +50,7 @@ create table if not exists public.trades (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.ai_analysis (
+create table public.ai_analysis (
   id uuid primary key default gen_random_uuid(),
   trade_id uuid not null references public.trades(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -68,30 +68,26 @@ create table if not exists public.ai_analysis (
   updated_at timestamptz not null default now()
 );
 
-create index if not exists profiles_email_idx on public.profiles(email);
-create index if not exists trading_rules_user_id_idx on public.trading_rules(user_id);
-create index if not exists trades_user_created_idx on public.trades(user_id, created_at desc);
-create index if not exists trades_user_pair_idx on public.trades(user_id, pair);
-create index if not exists trades_user_outcome_idx on public.trades(user_id, outcome);
-create index if not exists ai_analysis_user_created_idx on public.ai_analysis(user_id, created_at desc);
-create index if not exists ai_analysis_trade_id_idx on public.ai_analysis(trade_id);
+create index profiles_email_idx on public.profiles(email);
+create index trading_rules_user_id_idx on public.trading_rules(user_id);
+create index trades_user_created_idx on public.trades(user_id, created_at desc);
+create index trades_user_pair_idx on public.trades(user_id, pair);
+create index trades_user_outcome_idx on public.trades(user_id, outcome);
+create index ai_analysis_user_created_idx on public.ai_analysis(user_id, created_at desc);
+create index ai_analysis_trade_id_idx on public.ai_analysis(trade_id);
 
-drop trigger if exists set_profiles_updated_at on public.profiles;
 create trigger set_profiles_updated_at
   before update on public.profiles
   for each row execute function public.set_updated_at();
 
-drop trigger if exists set_trading_rules_updated_at on public.trading_rules;
 create trigger set_trading_rules_updated_at
   before update on public.trading_rules
   for each row execute function public.set_updated_at();
 
-drop trigger if exists set_trades_updated_at on public.trades;
 create trigger set_trades_updated_at
   before update on public.trades
   for each row execute function public.set_updated_at();
 
-drop trigger if exists set_ai_analysis_updated_at on public.ai_analysis;
 create trigger set_ai_analysis_updated_at
   before update on public.ai_analysis
   for each row execute function public.set_updated_at();
@@ -101,25 +97,21 @@ alter table public.trading_rules enable row level security;
 alter table public.trades enable row level security;
 alter table public.ai_analysis enable row level security;
 
-drop policy if exists "Profiles are self-owned" on public.profiles;
 create policy "Profiles are self-owned" on public.profiles
   for all
   using (auth.uid() = id)
   with check (auth.uid() = id);
 
-drop policy if exists "Trading rules are self-owned" on public.trading_rules;
 create policy "Trading rules are self-owned" on public.trading_rules
   for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
-drop policy if exists "Trades are self-owned" on public.trades;
 create policy "Trades are self-owned" on public.trades
   for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
-drop policy if exists "AI analysis is self-owned" on public.ai_analysis;
 create policy "AI analysis is self-owned" on public.ai_analysis
   for all
   using (auth.uid() = user_id)
@@ -145,7 +137,6 @@ begin
 end;
 $$;
 
-drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();

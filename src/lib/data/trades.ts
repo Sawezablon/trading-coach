@@ -63,7 +63,7 @@ export async function getRules(): Promise<RuleSettings> {
     return demoRules;
   }
 
-  const { data, error } = await supabase.from("rules").select("*").eq("user_id", user.id).single();
+  const { data, error } = await supabase.from("trading_rules").select("*").eq("user_id", user.id).single();
 
   if (error) {
     throw new Error(error.message);

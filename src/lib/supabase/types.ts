@@ -64,7 +64,7 @@ export type Database = {
         Update: Partial<Trade>;
         Relationships: [];
       };
-      rules: {
+      trading_rules: {
         Row: RuleSettings;
         Insert: Partial<RuleSettings> & Pick<RuleSettings, "user_id">;
         Update: Partial<RuleSettings>;

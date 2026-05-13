@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     .map((session) => session.trim())
     .filter(Boolean);
 
-  const { error } = await supabase.from("rules").upsert({
+  const { error } = await supabase.from("trading_rules").upsert({
     user_id: user.id,
     max_risk_percent: Number(formData.get("max_risk_percent") ?? 1),
     min_rr: Number(formData.get("min_rr") ?? 2),

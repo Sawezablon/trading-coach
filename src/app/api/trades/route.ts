@@ -72,7 +72,7 @@ export async function POST(request: Request) {
   }
 
   const { data: rulesData, error: rulesError } = await supabase
-    .from("rules")
+    .from("trading_rules")
     .select("*")
     .eq("user_id", user.id)
     .single();
