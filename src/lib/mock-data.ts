@@ -1,0 +1,108 @@
+import type { AiAnalysis, RuleSettings, TradeWithAnalysis } from "@/lib/supabase/types";
+
+export const demoUserId = "demo-user";
+
+export const demoRules: RuleSettings = {
+  id: "demo-rules",
+  user_id: demoUserId,
+  max_risk_percent: 1,
+  min_rr: 2,
+  allowed_sessions: ["London", "New York"],
+  confirmation_required: true,
+  max_trades_per_day: 3,
+  notes: "Only take A setups after journaling the reason for entry.",
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+};
+
+export const demoAnalysis: AiAnalysis = {
+  id: "demo-analysis",
+  trade_id: "demo-trade-1",
+  user_id: demoUserId,
+  setup_quality_score: 78,
+  discipline_score: 72,
+  strengths: ["Clear liquidity sweep noted before entry", "Risk stayed near the plan"],
+  weaknesses: ["Entry was slightly early", "Exit criteria could be more specific"],
+  detected_mistakes: ["Entered before full confirmation candle close"],
+  rule_violations: ["Confirmation required"],
+  emotional_observations: ["Mild fear of missing out appears in the notes"],
+  improvement_suggestions: [
+    "Wait for the confirmation close before entering",
+    "Write invalidation before placing risk",
+  ],
+  recurring_mistakes: ["Early entries", "Moving from observation into action too quickly"],
+  model: "mock",
+  created_at: new Date().toISOString(),
+};
+
+export const demoTrades: TradeWithAnalysis[] = [
+  {
+    id: "demo-trade-1",
+    user_id: demoUserId,
+    pair: "XAUUSD",
+    direction: "long",
+    risk_percent: 0.8,
+    rr: 2.4,
+    session: "London",
+    emotions: "Focused, slightly impatient",
+    notes: "Liquidity sweep into demand. Entered after reclaim but before candle close.",
+    confirmation: false,
+    outcome: "win",
+    screenshot_url: null,
+    created_at: new Date("2026-05-12T09:15:00.000Z").toISOString(),
+    updated_at: new Date("2026-05-12T09:15:00.000Z").toISOString(),
+    ai_analysis: [demoAnalysis],
+  },
+  {
+    id: "demo-trade-2",
+    user_id: demoUserId,
+    pair: "EURUSD",
+    direction: "short",
+    risk_percent: 1.4,
+    rr: 1.6,
+    session: "New York",
+    emotions: "Frustrated after missing earlier setup",
+    notes: "Shorted the retest but size was above plan and RR was below minimum.",
+    confirmation: true,
+    outcome: "loss",
+    screenshot_url: null,
+    created_at: new Date("2026-05-11T14:40:00.000Z").toISOString(),
+    updated_at: new Date("2026-05-11T14:40:00.000Z").toISOString(),
+    ai_analysis: [
+      {
+        ...demoAnalysis,
+        id: "demo-analysis-2",
+        trade_id: "demo-trade-2",
+        setup_quality_score: 54,
+        discipline_score: 41,
+        rule_violations: ["Risk too high", "Minimum RR not met", "Possible revenge trade"],
+      },
+    ],
+  },
+  {
+    id: "demo-trade-3",
+    user_id: demoUserId,
+    pair: "GBPJPY",
+    direction: "long",
+    risk_percent: 0.7,
+    rr: 2.1,
+    session: "Asia",
+    emotions: "Calm",
+    notes: "Took a continuation entry outside preferred session.",
+    confirmation: true,
+    outcome: "breakeven",
+    screenshot_url: null,
+    created_at: new Date("2026-05-10T03:05:00.000Z").toISOString(),
+    updated_at: new Date("2026-05-10T03:05:00.000Z").toISOString(),
+    ai_analysis: [
+      {
+        ...demoAnalysis,
+        id: "demo-analysis-3",
+        trade_id: "demo-trade-3",
+        setup_quality_score: 67,
+        discipline_score: 63,
+        rule_violations: ["Entered outside allowed session"],
+      },
+    ],
+  },
+];

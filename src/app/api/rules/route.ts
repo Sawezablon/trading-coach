@@ -1,0 +1,43 @@
+import { NextResponse } from "next/server";
+
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+export async function POST(request: Request) {
+  const supabase = await createSupabaseServerClient();
+
+  if (!supabase) {
+    return NextResponse.json({ ok: true, demo: true });
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const formData = await request.formData();
+  const allowedSessions = String(formData.get("allowed_sessions") ?? "London")
+    .split(",")
+    .map((session) => session.trim())
+    .filter(Boolean);
+
+  const { error } = await supabase.from("rules").upsert({
+    user_id: user.id,
+    max_risk_percent: Number(formData.get("max_risk_percent") ?? 1),
+    min_rr: Number(formData.get("min_rr") ?? 2),
+    allowed_sessions: allowedSessions,
+    confirmation_required:
+      formData.get("confirmation_required") === "on" || formData.get("confirmation_required") === "true",
+    max_trades_per_day: Number(formData.get("max_trades_per_day") ?? 3),
+    notes: String(formData.get("notes") ?? ""),
+    updated_at: new Date().toISOString(),
+  });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  return NextResponse.json({ ok: true, demo: false });
+}

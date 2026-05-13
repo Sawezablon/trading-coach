@@ -1,10 +1,13 @@
 "use client";
 
+import { useActionState } from "react";
+
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 
+import { registerAction } from "@/app/(main)/auth/actions";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -21,6 +24,7 @@ const formSchema = z
   });
 
 export function RegisterForm() {
+  const [state, formAction, pending] = useActionState(registerAction, {});
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -30,18 +34,13 @@ export function RegisterForm() {
     },
   });
 
-  const onSubmit = (data: z.infer<typeof formSchema>) => {
-    toast("You submitted the following values", {
-      description: (
-        <pre className="mt-2 w-[320px] rounded-md bg-neutral-950 p-4">
-          <code className="text-white">{JSON.stringify(data, null, 2)}</code>
-        </pre>
-      ),
-    });
-  };
-
   return (
-    <form noValidate onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
+    <form noValidate action={formAction} className="flex flex-col gap-4">
+      {state.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{state.error}</AlertDescription>
+        </Alert>
+      ) : null}
       <FieldGroup className="gap-4">
         <Controller
           control={form.control}
@@ -52,6 +51,7 @@ export function RegisterForm() {
               <Input
                 {...field}
                 id="register-email"
+                name="email"
                 type="email"
                 placeholder="you@example.com"
                 autoComplete="email"
@@ -70,8 +70,9 @@ export function RegisterForm() {
               <Input
                 {...field}
                 id="register-password"
+                name="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="********"
                 autoComplete="new-password"
                 aria-invalid={fieldState.invalid}
               />
@@ -88,8 +89,9 @@ export function RegisterForm() {
               <Input
                 {...field}
                 id="register-confirm-password"
+                name="confirmPassword"
                 type="password"
-                placeholder="••••••••"
+                placeholder="********"
                 autoComplete="new-password"
                 aria-invalid={fieldState.invalid}
               />
@@ -98,8 +100,8 @@ export function RegisterForm() {
           )}
         />
       </FieldGroup>
-      <Button className="w-full" type="submit">
-        Register
+      <Button className="w-full" type="submit" disabled={pending}>
+        {pending ? "Creating account..." : "Create account"}
       </Button>
     </form>
   );

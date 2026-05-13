@@ -1,7 +1,5 @@
 import Link from "next/link";
 
-import { Globe } from "lucide-react";
-
 import { APP_CONFIG } from "@/config/app-config";
 
 import { LoginForm } from "../../_components/login-form";
@@ -27,7 +25,7 @@ export default function LoginV2() {
       <div className="absolute top-5 flex w-full justify-end px-10">
         <div className="text-muted-foreground text-sm">
           Don&apos;t have an account?{" "}
-          <Link prefetch={false} className="text-foreground" href="register">
+          <Link prefetch={false} className="text-foreground" href="/auth/v2/register">
             Register
           </Link>
         </div>
@@ -35,10 +33,7 @@ export default function LoginV2() {
 
       <div className="absolute bottom-5 flex w-full justify-between px-10">
         <div className="text-sm">{APP_CONFIG.copyright}</div>
-        <div className="flex items-center gap-1 text-sm">
-          <Globe className="size-4 text-muted-foreground" />
-          ENG
-        </div>
+        <div className="flex items-center gap-1 text-sm">ENG</div>
       </div>
     </>
   );

@@ -1,10 +1,13 @@
 "use client";
 
+import { useActionState } from "react";
+
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 
+import { loginAction } from "@/app/(main)/auth/actions";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldContent, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -17,6 +20,7 @@ const formSchema = z.object({
 });
 
 export function LoginForm() {
+  const [state, formAction, pending] = useActionState(loginAction, {});
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -26,18 +30,13 @@ export function LoginForm() {
     },
   });
 
-  const onSubmit = (data: z.infer<typeof formSchema>) => {
-    toast("You submitted the following values", {
-      description: (
-        <pre className="mt-2 w-[320px] rounded-md bg-neutral-950 p-4">
-          <code className="text-white">{JSON.stringify(data, null, 2)}</code>
-        </pre>
-      ),
-    });
-  };
-
   return (
-    <form noValidate onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
+    <form noValidate action={formAction} className="flex flex-col gap-4">
+      {state.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{state.error}</AlertDescription>
+        </Alert>
+      ) : null}
       <FieldGroup className="gap-4">
         <Controller
           control={form.control}
@@ -48,6 +47,7 @@ export function LoginForm() {
               <Input
                 {...field}
                 id="login-email"
+                name="email"
                 type="email"
                 placeholder="you@example.com"
                 autoComplete="email"
@@ -66,8 +66,9 @@ export function LoginForm() {
               <Input
                 {...field}
                 id="login-password"
+                name="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="********"
                 autoComplete="current-password"
                 aria-invalid={fieldState.invalid}
               />
@@ -97,8 +98,8 @@ export function LoginForm() {
           )}
         />
       </FieldGroup>
-      <Button className="w-full" type="submit">
-        Login
+      <Button className="w-full" type="submit" disabled={pending}>
+        {pending ? "Logging in..." : "Login"}
       </Button>
     </form>
   );

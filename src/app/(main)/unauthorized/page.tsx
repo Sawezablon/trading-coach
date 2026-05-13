@@ -1,12 +1,12 @@
 import Link from "next/link";
 
-import { Lock } from "lucide-react";
-
 export default function page() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-4 py-12 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-md text-center">
-        <Lock className="mx-auto size-12 text-primary" />
+        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          !
+        </div>
         <h1 className="mt-4 font-bold text-3xl tracking-tight sm:text-4xl">Unauthorized Access</h1>
         <p className="mt-4 text-muted-foreground">
           You do not have permission to view the requested content. Please contact the site administrator if you believe

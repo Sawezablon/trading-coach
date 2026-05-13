@@ -3,11 +3,11 @@ import packageJson from "../../package.json";
 const currentYear = new Date().getFullYear();
 
 export const APP_CONFIG = {
-  name: "Qyvex Lab",
+  name: "TradeGuardian AI",
   version: packageJson.version,
-  copyright: `© ${currentYear}, Qyvex Lab.`,
+  copyright: `© ${currentYear}, TradeGuardian AI.`,
   meta: {
-    title: "Qyvex Lab",
-    description: "Qyvex Lab",
+    title: "TradeGuardian AI",
+    description: "AI trading journal and discipline coach for rule-based traders.",
   },
 };

@@ -1,4 +1,4 @@
-import { type LucideIcon, Upload } from "lucide-react";
+import { BarChart3, BookOpen, FilePlus2, type LucideIcon, Settings } from "lucide-react";
 
 export interface NavSubItem {
   title: string;
@@ -31,10 +31,25 @@ export const sidebarItems: NavGroup[] = [
     label: "Trading Coach",
     items: [
       {
-        title: "Upload",
+        title: "Dashboard",
+        url: "/dashboard",
+        icon: BarChart3,
+      },
+      {
+        title: "Journal",
+        url: "/dashboard/journal",
+        icon: BookOpen,
+      },
+      {
+        title: "New Trade",
         url: "/dashboard/upload",
-        icon: Upload,
+        icon: FilePlus2,
         isNew: true,
+      },
+      {
+        title: "Settings",
+        url: "/dashboard/settings",
+        icon: Settings,
       },
     ],
   },
