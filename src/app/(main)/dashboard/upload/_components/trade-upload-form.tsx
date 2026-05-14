@@ -102,162 +102,119 @@ export function TradeUploadForm({ rules, tradesToday }: { rules: RuleSettings; t
 
   return (
     <form onSubmit={onSubmit} className="grid gap-4 xl:grid-cols-12">
-      <Card className="xl:col-span-7">
-        <CardHeader>
-          <CardTitle>Trade context</CardTitle>
-          <CardDescription>Capture the facts needed to audit your rule discipline.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="pair">Pair</Label>
-            <Input
-              id="pair"
-              name="pair"
-              placeholder="XAUUSD"
-              required
-              value={pair}
-              onChange={(event) => setPair(event.target.value.toUpperCase())}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="direction">Direction</Label>
-            <Select name="direction" value={direction} onValueChange={(value) => setDirection(value as TradeDirection)}>
-              <SelectTrigger id="direction">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="long">Long</SelectItem>
-                <SelectItem value="short">Short</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="risk_percent">Risk %</Label>
-            <Input
-              id="risk_percent"
-              name="risk_percent"
-              type="number"
-              step="0.1"
-              min="0"
-              placeholder="1"
-              required
-              value={riskPercent || ""}
-              onChange={(event) => setRiskPercent(Number(event.target.value))}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="rr">RR</Label>
-            <Input
-              id="rr"
-              name="rr"
-              type="number"
-              step="0.1"
-              min="0"
-              placeholder="2.5"
-              required
-              value={rr || ""}
-              onChange={(event) => setRr(Number(event.target.value))}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="session">Session</Label>
-            <Select name="session" value={session} onValueChange={setSession}>
-              <SelectTrigger id="session">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Asia">Asia</SelectItem>
-                <SelectItem value="London">London</SelectItem>
-                <SelectItem value="New York">New York</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center gap-2 self-end rounded-lg border p-3">
-            <Checkbox
-              id="confirmation"
-              name="confirmation"
-              checked={confirmation}
-              onCheckedChange={(checked) => setConfirmation(Boolean(checked))}
-            />
-            <Label htmlFor="confirmation" className="text-sm">
-              Confirmation was present
-            </Label>
-          </div>
-
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="emotions">Emotions before trade</Label>
-            <Input
-              id="emotions"
-              name="emotions"
-              placeholder="Calm, focused, impatient..."
-              required
-              value={emotions}
-              onChange={(event) => setEmotions(event.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="notes">Trade notes</Label>
-            <Textarea
-              id="notes"
-              name="notes"
-              placeholder="Setup, entry reason, invalidation, management notes..."
-              required
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="space-y-4 xl:col-span-5">
+      <div className="space-y-4 xl:col-span-7">
         <Card>
           <CardHeader>
-            <CardTitle>Pre-Trade Checklist</CardTitle>
-            <CardDescription>Live rule check before saving this trade.</CardDescription>
+            <CardTitle>Trade context</CardTitle>
+            <CardDescription>Capture the facts needed to audit your rule discipline.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {hasRequiredFailures ? (
-              <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive text-sm">
-                This trade violates your rules.
-              </div>
-            ) : null}
+          <CardContent className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              {checklist.items.map((rule) => (
-                <div key={rule.id} className="flex items-start gap-2 rounded-md border p-2 text-sm">
-                  {rule.type === "manual" ? (
-                    <Checkbox
-                      checked={manualRuleIds.includes(rule.id)}
-                      onCheckedChange={(checked) => {
-                        setManualRuleIds((current) =>
-                          checked ? [...current, rule.id] : current.filter((id) => id !== rule.id),
-                        );
-                      }}
-                    />
-                  ) : (
-                    <span
-                      className={
-                        rule.status === "passed"
-                          ? "mt-0.5 flex size-4 items-center justify-center rounded-full bg-green-600 text-[10px] text-white"
-                          : "mt-0.5 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground"
-                      }
-                    >
-                      {rule.status === "passed" ? "✓" : "!"}
-                    </span>
-                  )}
-                  <div className="flex-1">
-                    <div>{rule.label}</div>
-                    <div className="text-muted-foreground text-xs capitalize">
-                      {rule.type} · {rule.status}
-                    </div>
-                  </div>
-                </div>
-              ))}
+              <Label htmlFor="pair">Pair</Label>
+              <Input
+                id="pair"
+                name="pair"
+                placeholder="XAUUSD"
+                required
+                value={pair}
+                onChange={(event) => setPair(event.target.value.toUpperCase())}
+              />
             </div>
-            <div className="text-muted-foreground text-sm">Completion: {checklist.completionRate}%</div>
+
+            <div className="space-y-2">
+              <Label htmlFor="direction">Direction</Label>
+              <Select
+                name="direction"
+                value={direction}
+                onValueChange={(value) => setDirection(value as TradeDirection)}
+              >
+                <SelectTrigger id="direction">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="long">Long</SelectItem>
+                  <SelectItem value="short">Short</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="risk_percent">Risk %</Label>
+              <Input
+                id="risk_percent"
+                name="risk_percent"
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder="1"
+                required
+                value={riskPercent || ""}
+                onChange={(event) => setRiskPercent(Number(event.target.value))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="rr">RR</Label>
+              <Input
+                id="rr"
+                name="rr"
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder="2.5"
+                required
+                value={rr || ""}
+                onChange={(event) => setRr(Number(event.target.value))}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="session">Session</Label>
+              <Select name="session" value={session} onValueChange={setSession}>
+                <SelectTrigger id="session">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Asia">Asia</SelectItem>
+                  <SelectItem value="London">London</SelectItem>
+                  <SelectItem value="New York">New York</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2 self-end rounded-lg border p-3">
+              <Checkbox
+                id="confirmation"
+                name="confirmation"
+                checked={confirmation}
+                onCheckedChange={(checked) => setConfirmation(Boolean(checked))}
+              />
+              <Label htmlFor="confirmation" className="text-sm">
+                Confirmation was present
+              </Label>
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="emotions">Emotions before trade</Label>
+              <Input
+                id="emotions"
+                name="emotions"
+                placeholder="Calm, focused, impatient..."
+                required
+                value={emotions}
+                onChange={(event) => setEmotions(event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="notes">Trade notes</Label>
+              <Textarea
+                id="notes"
+                name="notes"
+                placeholder="Setup, entry reason, invalidation, management notes..."
+                required
+              />
+            </div>
           </CardContent>
         </Card>
 
@@ -300,6 +257,53 @@ export function TradeUploadForm({ rules, tradesToday }: { rules: RuleSettings; t
           </CardContent>
         </Card>
       </div>
+
+      <Card className="xl:col-span-5">
+        <CardHeader>
+          <CardTitle>Pre-Trade Checklist</CardTitle>
+          <CardDescription>Live rule check before saving this trade.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {hasRequiredFailures ? (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive text-sm">
+              This trade violates your rules.
+            </div>
+          ) : null}
+          <div className="space-y-2">
+            {checklist.items.map((rule) => (
+              <div key={rule.id} className="flex items-start gap-2 rounded-md border p-2 text-sm">
+                {rule.type === "manual" ? (
+                  <Checkbox
+                    checked={manualRuleIds.includes(rule.id)}
+                    onCheckedChange={(checked) => {
+                      setManualRuleIds((current) =>
+                        checked ? [...current, rule.id] : current.filter((id) => id !== rule.id),
+                      );
+                    }}
+                  />
+                ) : (
+                  <span
+                    className={
+                      rule.status === "passed"
+                        ? "mt-0.5 flex size-4 items-center justify-center rounded-full bg-green-600 text-[10px] text-white"
+                        : "mt-0.5 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground"
+                    }
+                  >
+                    {rule.status === "passed" ? "OK" : "!"}
+                  </span>
+                )}
+                <div className="flex-1">
+                  <div>{rule.label}</div>
+                  <div className="text-muted-foreground text-xs capitalize">
+                    {rule.type} - {rule.status}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="text-muted-foreground text-sm">Completion: {checklist.completionRate}%</div>
+        </CardContent>
+      </Card>
     </form>
   );
 }
