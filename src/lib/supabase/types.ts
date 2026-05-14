@@ -16,6 +16,11 @@ export type Trade = {
   confirmation: boolean;
   outcome: TradeOutcome;
   screenshot_url: string | null;
+  checklist_results: ChecklistItemResult[];
+  passed_rules: string[];
+  failed_rules: string[];
+  checklist_completion_rate: number;
+  discipline_score: number;
   created_at: string;
   updated_at: string;
 };
@@ -26,8 +31,12 @@ export type RuleSettings = {
   max_risk_percent: number;
   min_rr: number;
   allowed_sessions: string[];
+  allowed_pairs: string[];
+  allowed_directions: TradeDirection[];
   confirmation_required: boolean;
+  require_screenshot: boolean;
   max_trades_per_day: number;
+  strict_mode: boolean;
   custom_rules: string[];
   notes: string | null;
   created_at: string;
@@ -49,6 +58,14 @@ export type AiAnalysis = {
   recurring_mistakes: string[];
   model: string;
   created_at: string;
+};
+
+export type ChecklistItemResult = {
+  id: string;
+  label: string;
+  status: "passed" | "failed" | "unchecked";
+  required: boolean;
+  type: "auto" | "manual";
 };
 
 export type TradeWithAnalysis = Trade & {

@@ -63,6 +63,10 @@ export default async function SettingsPage({
               <Input id="allowed_sessions" name="allowed_sessions" defaultValue={rules.allowed_sessions.join(", ")} />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="allowed_pairs">Allowed pairs</Label>
+              <Input id="allowed_pairs" name="allowed_pairs" defaultValue={rules.allowed_pairs.join(", ")} />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="max_trades_per_day">Max trades per day</Label>
               <Input
                 id="max_trades_per_day"
@@ -71,6 +75,33 @@ export default async function SettingsPage({
                 defaultValue={rules.max_trades_per_day}
               />
             </div>
+            <div className="space-y-2 rounded-lg border p-3">
+              <Label>Allowed directions</Label>
+              <div className="flex gap-4 pt-1">
+                <div className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    id="allowed_direction_long"
+                    name="allowed_directions"
+                    value="long"
+                    defaultChecked={rules.allowed_directions.includes("long")}
+                  />
+                  <Label htmlFor="allowed_direction_long" className="font-normal">
+                    Buy
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    id="allowed_direction_short"
+                    name="allowed_directions"
+                    value="short"
+                    defaultChecked={rules.allowed_directions.includes("short")}
+                  />
+                  <Label htmlFor="allowed_direction_short" className="font-normal">
+                    Sell
+                  </Label>
+                </div>
+              </div>
+            </div>
             <div className="flex items-center gap-2 rounded-lg border p-3 md:col-span-2">
               <Checkbox
                 id="confirmation_required"
@@ -78,6 +109,14 @@ export default async function SettingsPage({
                 defaultChecked={rules.confirmation_required}
               />
               <Label htmlFor="confirmation_required">Confirmation required before entry</Label>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg border p-3 md:col-span-2">
+              <Checkbox id="require_screenshot" name="require_screenshot" defaultChecked={rules.require_screenshot} />
+              <Label htmlFor="require_screenshot">Screenshot required before saving a trade</Label>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg border p-3 md:col-span-2">
+              <Checkbox id="strict_mode" name="strict_mode" defaultChecked={rules.strict_mode} />
+              <Label htmlFor="strict_mode">Strict mode: block trades when required rules fail</Label>
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="custom_rules">Your personal rules</Label>

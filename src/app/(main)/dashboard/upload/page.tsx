@@ -1,6 +1,11 @@
 import { TradeUploadForm } from "@/app/(main)/dashboard/upload/_components/trade-upload-form";
+import { getRules, getTrades } from "@/lib/data/trades";
 
-export default function Page() {
+export default async function Page() {
+  const [rules, trades] = await Promise.all([getRules(), getTrades()]);
+  const today = new Date().toDateString();
+  const tradesToday = trades.filter((trade) => new Date(trade.created_at).toDateString() === today).length;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="space-y-1">
@@ -9,7 +14,7 @@ export default function Page() {
           Upload a screenshot and journal the decision. TradeGuardian checks the entry against your rules.
         </p>
       </div>
-      <TradeUploadForm />
+      <TradeUploadForm rules={rules} tradesToday={tradesToday} />
     </div>
   );
 }

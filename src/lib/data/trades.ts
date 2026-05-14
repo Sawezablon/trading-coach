@@ -10,6 +10,9 @@ export type DashboardMetrics = {
   ruleViolations: number;
   bestSetup: string;
   avgDiscipline: number;
+  avgChecklistCompletion: number;
+  failedRuleTrades: number;
+  mostFailedChecklistItem: string;
 };
 
 export async function getSessionUser() {
@@ -112,6 +115,17 @@ export function calculateDashboardMetrics(trades: TradeWithAnalysis[]): Dashboar
   const avgDiscipline = analyses.length
     ? Math.round(analyses.reduce((sum, analysis) => sum + analysis.discipline_score, 0) / analyses.length)
     : 0;
+  const avgChecklistCompletion = trades.length
+    ? Math.round(trades.reduce((sum, trade) => sum + (trade.checklist_completion_rate ?? 0), 0) / trades.length)
+    : 0;
+  const failedRuleTrades = trades.filter((trade) => (trade.failed_rules?.length ?? 0) > 0).length;
+  const failedCounts = trades
+    .flatMap((trade) => trade.failed_rules ?? [])
+    .reduce<Record<string, number>>((acc, rule) => {
+      acc[rule] = (acc[rule] ?? 0) + 1;
+      return acc;
+    }, {});
+  const mostFailedChecklistItem = Object.entries(failedCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "No failed rules";
 
   return {
     totalTrades: trades.length,
@@ -119,5 +133,8 @@ export function calculateDashboardMetrics(trades: TradeWithAnalysis[]): Dashboar
     ruleViolations,
     bestSetup,
     avgDiscipline,
+    avgChecklistCompletion,
+    failedRuleTrades,
+    mostFailedChecklistItem,
   };
 }

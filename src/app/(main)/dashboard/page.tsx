@@ -38,6 +38,9 @@ export default async function Page() {
         <MetricCard title="Violations" value={metrics.ruleViolations} signal="RV" />
         <MetricCard title="Best setup" value={metrics.bestSetup} signal="BS" />
         <MetricCard title="Discipline" value={`${metrics.avgDiscipline}%`} signal="DS" />
+        <MetricCard title="Checklist" value={`${metrics.avgChecklistCompletion}%`} signal="CL" />
+        <MetricCard title="Failed-rule trades" value={metrics.failedRuleTrades} signal="FR" />
+        <MetricCard title="Most failed" value={metrics.mostFailedChecklistItem} signal="MF" />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-12">

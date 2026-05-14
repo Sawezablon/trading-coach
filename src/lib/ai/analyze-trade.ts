@@ -1,13 +1,14 @@
 import OpenAI from "openai";
 
 import { env } from "@/lib/env";
-import type { AiAnalysis, RuleSettings } from "@/lib/supabase/types";
+import type { AiAnalysis, ChecklistItemResult, RuleSettings, TradeDirection } from "@/lib/supabase/types";
 import { detectRuleViolations } from "@/lib/trade-rules";
 
 type AnalyzeTradeInput = {
   tradeId: string;
   userId: string;
   pair: string;
+  direction: TradeDirection;
   risk_percent: number;
   rr: number;
   session: string;
@@ -16,11 +17,20 @@ type AnalyzeTradeInput = {
   confirmation: boolean;
   imageDataUrl?: string | null;
   rules: RuleSettings;
+  checklist?: {
+    items: ChecklistItemResult[];
+    passedRules: string[];
+    failedRules: string[];
+    completionRate: number;
+    disciplineScore: number;
+  };
   tradesToday?: number;
 };
 
 function mockAnalysis(input: AnalyzeTradeInput): Omit<AiAnalysis, "id" | "created_at"> {
-  const ruleViolations = detectRuleViolations(input, input.rules);
+  const ruleViolations =
+    input.checklist?.failedRules ??
+    detectRuleViolations({ ...input, hasScreenshot: Boolean(input.imageDataUrl) }, input.rules);
   const emotionalRisk = /revenge|frustrated|angry|tilt|chasing|impatient/i.test(input.emotions);
   const baseDiscipline = 92 - ruleViolations.length * 14 - (emotionalRisk ? 10 : 0);
   const disciplineScore = Math.max(20, Math.min(96, baseDiscipline));
@@ -82,7 +92,8 @@ Session: ${input.session}
 Confirmation: ${input.confirmation ? "yes" : "no"}
 Emotions: ${input.emotions}
 Notes: ${input.notes}
-Rules: ${JSON.stringify(input.rules)}`,
+Rules: ${JSON.stringify(input.rules)}
+Checklist results: ${JSON.stringify(input.checklist ?? null)}`,
             },
             ...(input.imageDataUrl
               ? [{ type: "input_image" as const, image_url: input.imageDataUrl, detail: "low" as const }]

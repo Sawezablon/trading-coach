@@ -4,6 +4,7 @@ import { analyzeTrade } from "@/lib/ai/analyze-trade";
 import { demoRules } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { RuleSettings, TradeDirection } from "@/lib/supabase/types";
+import { evaluateTradeChecklist } from "@/lib/trade-rules";
 
 function asNumber(value: FormDataEntryValue | null, fallback = 0) {
   const parsed = Number(value);
@@ -38,15 +39,29 @@ export async function POST(request: Request) {
     confirmation: formData.get("confirmation") === "on" || formData.get("confirmation") === "true",
     outcome: "open" as const,
   };
+  const manualRuleIds = String(formData.get("manual_rule_ids") ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
 
   if (!supabase) {
     const tradeId = crypto.randomUUID();
+    const checklist = evaluateTradeChecklist(
+      {
+        ...tradeInput,
+        hasScreenshot: Boolean(screenshot),
+        tradesToday: 0,
+        manualRuleIds,
+      },
+      demoRules,
+    );
     const analysis = await analyzeTrade({
       ...tradeInput,
       tradeId,
       userId: "demo-user",
       imageDataUrl,
       rules: demoRules,
+      checklist,
     });
 
     return NextResponse.json({
@@ -55,6 +70,11 @@ export async function POST(request: Request) {
         user_id: "demo-user",
         ...tradeInput,
         screenshot_url: null,
+        checklist_results: checklist.items,
+        passed_rules: checklist.passedRules,
+        failed_rules: checklist.failedRules,
+        checklist_completion_rate: checklist.completionRate,
+        discipline_score: checklist.disciplineScore,
         created_at: now,
         updated_at: now,
       },
@@ -71,14 +91,56 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: rulesData, error: rulesError } = await supabase
+  const { data: existingRules, error: rulesError } = await supabase
     .from("trading_rules")
     .select("*")
     .eq("user_id", user.id)
-    .single();
+    .maybeSingle();
 
   if (rulesError) {
     return NextResponse.json({ error: rulesError.message }, { status: 400 });
+  }
+
+  let rulesData = existingRules;
+
+  if (!rulesData) {
+    const { data: createdRules, error: createRulesError } = await supabase
+      .from("trading_rules")
+      .insert({ user_id: user.id })
+      .select("*")
+      .single();
+
+    if (createRulesError || !createdRules) {
+      return NextResponse.json(
+        { error: createRulesError?.message ?? "Trading rules could not be loaded" },
+        { status: 400 },
+      );
+    }
+
+    rulesData = createdRules;
+  }
+
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const { count: tradesToday } = await supabase
+    .from("trades")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .gte("created_at", startOfDay.toISOString());
+
+  const rules = rulesData as RuleSettings;
+  const checklist = evaluateTradeChecklist(
+    {
+      ...tradeInput,
+      hasScreenshot: Boolean(screenshot),
+      tradesToday: tradesToday ?? 0,
+      manualRuleIds,
+    },
+    rules,
+  );
+
+  if (rules.strict_mode && checklist.requiredFailures.length > 0) {
+    return NextResponse.json({ error: "Strict mode is on. This trade violates your rules." }, { status: 400 });
   }
 
   let screenshotUrl: string | null = null;
@@ -98,7 +160,16 @@ export async function POST(request: Request) {
 
   const { data: trade, error: tradeError } = await supabase
     .from("trades")
-    .insert({ user_id: user.id, ...tradeInput, screenshot_url: screenshotUrl })
+    .insert({
+      user_id: user.id,
+      ...tradeInput,
+      screenshot_url: screenshotUrl,
+      checklist_results: checklist.items,
+      passed_rules: checklist.passedRules,
+      failed_rules: checklist.failedRules,
+      checklist_completion_rate: checklist.completionRate,
+      discipline_score: checklist.disciplineScore,
+    })
     .select()
     .single();
 
@@ -111,7 +182,8 @@ export async function POST(request: Request) {
     tradeId: trade.id,
     userId: user.id,
     imageDataUrl,
-    rules: rulesData as RuleSettings,
+    rules,
+    checklist,
   });
 
   const { data: analysis, error: analysisError } = await supabase

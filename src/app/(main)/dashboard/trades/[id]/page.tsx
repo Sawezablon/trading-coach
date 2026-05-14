@@ -47,6 +47,28 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
 
         <Card>
           <CardHeader>
+            <CardTitle>Completed checklist</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Score label="Checklist completion" value={trade.checklist_completion_rate ?? 0} />
+            <Score label="Discipline score" value={trade.discipline_score ?? analysis?.discipline_score ?? 0} />
+            <ChecklistBlock
+              label="Passed items"
+              items={(trade.checklist_results ?? []).filter((item) => item.status === "passed")}
+            />
+            <ChecklistBlock
+              label="Failed items"
+              items={(trade.checklist_results ?? []).filter((item) => item.status === "failed")}
+            />
+            <ChecklistBlock
+              label="Manual confirmations"
+              items={(trade.checklist_results ?? []).filter((item) => item.type === "manual")}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Screenshot</CardTitle>
           </CardHeader>
           <CardContent>
@@ -115,6 +137,32 @@ function ListBlock({ label, items }: { label: string; items: string[] }) {
             <Badge key={item} variant="outline">
               {item}
             </Badge>
+          ))
+        ) : (
+          <span className="text-muted-foreground text-sm">No items recorded.</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChecklistBlock({
+  label,
+  items,
+}: {
+  label: string;
+  items: { id: string; label: string; status: string; type: string }[];
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="font-medium text-sm">{label}</div>
+      <div className="space-y-2">
+        {items.length ? (
+          items.map((item) => (
+            <div key={item.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
+              <span>{item.label}</span>
+              <Badge variant={item.status === "passed" ? "secondary" : "destructive"}>{item.status}</Badge>
+            </div>
           ))
         ) : (
           <span className="text-muted-foreground text-sm">No items recorded.</span>
