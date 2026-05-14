@@ -8,8 +8,9 @@ export default async function Page() {
   return (
     <div className="flex flex-col gap-6">
       <div className="space-y-1">
-        <h1 className="text-3xl tracking-tight">Log a trade</h1>
-        <p className="text-muted-foreground text-sm">
+        <div className="text-muted-foreground text-sm">Execution journal</div>
+        <h1 className="font-semibold text-4xl tracking-tight">Log a trade</h1>
+        <p className="max-w-2xl text-muted-foreground text-sm">
           Upload a screenshot and journal the decision. Qyvex Edge checks the entry against your rules.
         </p>
       </div>

@@ -519,20 +519,29 @@ export function TradeUploadForm({ rules, tradeTimestamps, initialTrade }: TradeF
         </Card>
       </div>
 
-      <Card className="xl:col-span-5">
+      <Card className="xl:sticky xl:top-20 xl:col-span-5 xl:self-start">
         <CardHeader>
           <CardTitle>Pre-Trade Checklist</CardTitle>
           <CardDescription>Live rule check before saving this trade.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           {hasRequiredFailures ? (
-            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive text-sm">
+            <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-destructive text-sm shadow-[0_0_40px_rgb(239_68_68/0.08)]">
               This trade violates your rules.
             </div>
           ) : null}
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {checklist.items.map((rule) => (
-              <div key={rule.id} className="flex items-start gap-2 rounded-md border p-2 text-sm">
+              <div
+                key={rule.id}
+                className={
+                  rule.status === "passed"
+                    ? "flex items-start gap-3 rounded-2xl border border-[#22C55E]/20 bg-[#22C55E]/10 p-3 text-sm shadow-[0_0_28px_rgb(34_197_94/0.08)] transition-all"
+                    : rule.status === "failed"
+                      ? "flex items-start gap-3 rounded-2xl border border-destructive/25 bg-destructive/10 p-3 text-sm shadow-[0_0_28px_rgb(239_68_68/0.06)] transition-all"
+                      : "flex items-start gap-3 rounded-2xl border border-border/80 bg-secondary/50 p-3 text-sm transition-all"
+                }
+              >
                 {rule.type === "manual" ? (
                   <Checkbox
                     checked={manualRuleIds.includes(rule.id)}
@@ -546,15 +555,15 @@ export function TradeUploadForm({ rules, tradeTimestamps, initialTrade }: TradeF
                   <span
                     className={
                       rule.status === "passed"
-                        ? "mt-0.5 flex size-4 items-center justify-center rounded-full bg-green-600 text-[10px] text-white"
-                        : "mt-0.5 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground"
+                        ? "mt-0.5 flex size-5 items-center justify-center rounded-full bg-[#22C55E] text-[10px] text-white shadow-[0_0_18px_rgb(34_197_94/0.35)]"
+                        : "mt-0.5 flex size-5 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground shadow-[0_0_18px_rgb(239_68_68/0.25)]"
                     }
                   >
                     {rule.status === "passed" ? "OK" : "!"}
                   </span>
                 )}
                 <div className="flex-1">
-                  <div>{rule.label}</div>
+                  <div className="font-medium">{rule.label}</div>
                   <div className="text-muted-foreground text-xs capitalize">
                     {rule.type} - {rule.status}
                   </div>
@@ -562,7 +571,15 @@ export function TradeUploadForm({ rules, tradeTimestamps, initialTrade }: TradeF
               </div>
             ))}
           </div>
-          <div className="text-muted-foreground text-sm">Completion: {checklist.completionRate}%</div>
+          <div className="rounded-2xl border bg-secondary/50 p-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Checklist completion</span>
+              <span className="font-semibold">{checklist.completionRate}%</span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${checklist.completionRate}%` }} />
+            </div>
+          </div>
         </CardContent>
       </Card>
     </form>

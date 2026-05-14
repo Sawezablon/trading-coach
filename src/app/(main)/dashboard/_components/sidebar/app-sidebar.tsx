@@ -87,8 +87,10 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
               <Link prefetch={false} href="/dashboard/upload">
-                <Command />
-                <span className="font-semibold text-base">{APP_CONFIG.name}</span>
+                <span className="flex size-8 items-center justify-center rounded-xl bg-primary font-semibold text-primary-foreground text-xs">
+                  QE
+                </span>
+                <span className="font-semibold text-base tracking-tight">{APP_CONFIG.name}</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

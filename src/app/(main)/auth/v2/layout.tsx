@@ -7,7 +7,8 @@ export default function Layout({ children }: Readonly<{ children: ReactNode }>) 
   return (
     <main>
       <div className="grid h-dvh justify-center p-2 lg:grid-cols-2">
-        <div className="relative order-2 hidden h-full rounded-3xl bg-primary lg:flex">
+        <div className="relative order-2 hidden h-full overflow-hidden rounded-3xl border bg-card lg:flex">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgb(124_92_255/0.28),transparent_28rem),radial-gradient(circle_at_80%_80%,rgb(94_234_212/0.12),transparent_24rem)]" />
           <div className="absolute top-10 space-y-1 px-10 text-primary-foreground">
             <div className="flex size-10 items-center justify-center rounded-full bg-primary-foreground text-primary">
               QE

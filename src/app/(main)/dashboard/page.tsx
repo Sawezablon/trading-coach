@@ -22,10 +22,11 @@ export default async function Page() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-3xl tracking-tight">Discipline dashboard</h1>
-          <p className="text-muted-foreground text-sm">
+          <div className="text-muted-foreground text-sm">Qyvex Edge</div>
+          <h1 className="font-semibold text-4xl tracking-tight">Discipline dashboard</h1>
+          <p className="max-w-2xl text-muted-foreground text-sm">
             Track execution quality, rule adherence, and recent journal activity.
           </p>
         </div>
@@ -34,18 +35,21 @@ export default async function Page() {
         </Button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard title="Total trades" value={metrics.totalTrades} signal="TR" />
-        <MetricCard title="Open trades" value={metrics.openTrades} signal="OP" />
-        <MetricCard title="Closed trades" value={metrics.closedTrades} signal="CL" />
-        <MetricCard title="Wins" value={metrics.wins} signal="W" />
-        <MetricCard title="Losses" value={metrics.losses} signal="L" />
-        <MetricCard title="Breakevens" value={metrics.breakevens} signal="BE" />
+      <div className="grid gap-4 md:grid-cols-3">
+        <MetricCard title="Discipline" value={`${metrics.avgDiscipline}%`} signal="DS" featured />
         <MetricCard title="Win rate" value={`${metrics.winRate}%`} signal="WR" />
-        <MetricCard title="Avg final RR" value={`${metrics.averageFinalRr}R`} signal="RR" />
         <MetricCard title="Total P/L" value={metrics.totalProfitLoss} signal="PL" />
-        <MetricCard title="Violation rate" value={`${metrics.ruleViolationRate}%`} signal="RV" />
-        <MetricCard title="Discipline" value={`${metrics.avgDiscipline}%`} signal="DS" />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard title="Total trades" value={metrics.totalTrades} signal="TR" compact />
+        <MetricCard title="Open" value={metrics.openTrades} signal="OP" compact />
+        <MetricCard title="Closed" value={metrics.closedTrades} signal="CL" compact />
+        <MetricCard title="Avg final RR" value={`${metrics.averageFinalRr}R`} signal="RR" compact />
+        <MetricCard title="Wins" value={metrics.wins} signal="W" compact />
+        <MetricCard title="Losses" value={metrics.losses} signal="L" compact />
+        <MetricCard title="Breakevens" value={metrics.breakevens} signal="BE" compact />
+        <MetricCard title="Violation rate" value={`${metrics.ruleViolationRate}%`} signal="RV" compact />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-12">
@@ -58,7 +62,7 @@ export default async function Page() {
           </CardContent>
         </Card>
 
-        <Card className="xl:col-span-5">
+        <Card className="bg-gradient-to-br from-card to-secondary/80 xl:col-span-5">
           <CardHeader>
             <CardTitle>AI feedback panel</CardTitle>
           </CardHeader>
@@ -90,7 +94,7 @@ export default async function Page() {
               <Link
                 key={trade.id}
                 href={`/dashboard/trades/${trade.id}`}
-                className="grid gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50 md:grid-cols-[1fr_auto_auto]"
+                className="grid gap-3 rounded-2xl border border-border/80 bg-secondary/40 p-4 transition-colors hover:border-primary/30 hover:bg-card md:grid-cols-[1fr_auto_auto_auto]"
               >
                 <div>
                   <div className="font-medium">{trade.pair}</div>
@@ -111,15 +115,33 @@ export default async function Page() {
   );
 }
 
-function MetricCard({ title, value, signal }: { title: string; value: string | number; signal: string }) {
+function MetricCard({
+  title,
+  value,
+  signal,
+  featured = false,
+  compact = false,
+}: {
+  title: string;
+  value: string | number;
+  signal: string;
+  featured?: boolean;
+  compact?: boolean;
+}) {
   return (
-    <Card>
-      <CardContent className="flex items-center justify-between gap-3 p-4">
+    <Card className={featured ? "border-primary/25 bg-gradient-to-br from-primary/15 to-card" : ""}>
+      <CardContent
+        className={
+          compact ? "flex items-center justify-between gap-3 p-4" : "flex items-center justify-between gap-4 p-5"
+        }
+      >
         <div>
           <div className="text-muted-foreground text-sm">{title}</div>
-          <div className="mt-1 font-semibold text-2xl">{value}</div>
+          <div className={featured ? "mt-2 font-semibold text-4xl tracking-tight" : "mt-1 font-semibold text-2xl"}>
+            {value}
+          </div>
         </div>
-        <div className="flex size-9 items-center justify-center rounded-md bg-muted font-medium text-muted-foreground text-xs">
+        <div className="flex size-9 items-center justify-center rounded-xl border border-border/80 bg-secondary font-medium text-muted-foreground text-xs">
           {signal}
         </div>
       </CardContent>

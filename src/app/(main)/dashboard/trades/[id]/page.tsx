@@ -27,9 +27,10 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
   return (
     <div className="grid gap-6 xl:grid-cols-12">
       <div className="space-y-6 xl:col-span-7">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
-            <h1 className="text-3xl tracking-tight">{trade.pair}</h1>
+            <div className="text-muted-foreground text-sm">Trade details</div>
+            <h1 className="font-semibold text-4xl tracking-tight">{trade.pair}</h1>
             <div className="flex flex-wrap gap-2">
               <TradeStatusBadge status={trade.status} />
               <TradeOutcomeBadge outcome={trade.outcome} />
@@ -38,7 +39,7 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
               {tradeDateTime} - {tradeTimezone}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline">
               <Link href={`/dashboard/trades/${trade.id}/edit`}>Edit</Link>
             </Button>
@@ -73,7 +74,7 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
         </Card>
 
         {trade.status === "closed" ? (
-          <Card>
+          <Card className="border-primary/15 bg-gradient-to-br from-card to-secondary/80">
             <CardHeader>
               <CardTitle>Close details</CardTitle>
             </CardHeader>
