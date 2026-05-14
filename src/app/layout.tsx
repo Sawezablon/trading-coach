@@ -15,6 +15,21 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: APP_CONFIG.meta.title,
   description: APP_CONFIG.meta.description,
+  applicationName: APP_CONFIG.name,
+  icons: {
+    icon: "/icon",
+  },
+  openGraph: {
+    title: APP_CONFIG.meta.title,
+    description: APP_CONFIG.meta.description,
+    siteName: APP_CONFIG.name,
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: APP_CONFIG.meta.title,
+    description: APP_CONFIG.meta.description,
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

@@ -10,7 +10,7 @@ export default async function Page() {
       <div className="space-y-1">
         <h1 className="text-3xl tracking-tight">Log a trade</h1>
         <p className="text-muted-foreground text-sm">
-          Upload a screenshot and journal the decision. TradeGuardian checks the entry against your rules.
+          Upload a screenshot and journal the decision. Qyvex Edge checks the entry against your rules.
         </p>
       </div>
       <TradeUploadForm rules={rules} tradeTimestamps={tradeTimestamps} />

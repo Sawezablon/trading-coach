@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { AppSidebar } from "@/app/(main)/dashboard/_components/sidebar/app-sidebar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { APP_CONFIG } from "@/config/app-config";
 import { getSessionUser } from "@/lib/data/trades";
 import { SIDEBAR_COLLAPSIBLE_VALUES, SIDEBAR_VARIANT_VALUES } from "@/lib/preferences/layout";
 import { cn } from "@/lib/utils";
@@ -38,7 +39,7 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
         collapsible={collapsible}
         user={{
           name: displayName,
-          email: sessionUser.email || "demo@tradeguardian.ai",
+          email: sessionUser.email || "demo@qyvex.com",
           avatar: "",
         }}
       />
@@ -63,6 +64,11 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
               <Separator
                 orientation="vertical"
                 className="mx-2 data-[orientation=vertical]:h-4 data-[orientation=vertical]:self-center"
+              />
+              <div className="hidden font-semibold text-sm sm:block">{APP_CONFIG.name}</div>
+              <Separator
+                orientation="vertical"
+                className="mx-2 hidden data-[orientation=vertical]:h-4 data-[orientation=vertical]:self-center sm:block"
               />
               <SearchDialog />
             </div>

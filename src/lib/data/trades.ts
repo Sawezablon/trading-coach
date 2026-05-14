@@ -27,7 +27,7 @@ export async function getSessionUser() {
   const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
-    return { id: "demo-user", email: "demo@tradeguardian.ai", isDemo: true };
+    return { id: "demo-user", email: "demo@qyvex.com", isDemo: true };
   }
 
   const {

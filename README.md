@@ -1,17 +1,18 @@
-# TradeGuardian AI
+# Qyvex Edge
 
-TradeGuardian AI is an MVP SaaS app for traders who want to follow their own rules more consistently. It is not a trading bot, signal provider, prediction platform, broker integration, or copy-trading tool.
+Qyvex is the parent brand. Qyvex Edge is the first product: an MVP SaaS app for traders who want to follow their own rules more consistently.
 
-The product is a discipline assistant, AI trading journal, rule violation detector, and execution coach.
+Qyvex Edge is not a trading bot, signal provider, prediction platform, broker integration, or copy-trading tool. It is a discipline assistant, AI trading journal, rule violation detector, and execution coach.
 
 ## MVP Features
 
 - Supabase Auth signup/login flow
 - Protected dashboard shell
-- Dashboard metrics for total trades, win rate, rule violations, best setup, and discipline score
-- Trade journal with recent trades and trade detail pages
-- Chart screenshot upload flow with trade notes, pair, risk, RR, session, emotions, and confirmation status
-- Rules settings for max risk, minimum RR, allowed sessions, confirmation requirement, and max trades per day
+- Dashboard metrics for open trades, closed trades, win rate, rule violations, discipline, and P/L
+- Trade journal with trade details, edit, close, outcome, and delete flows
+- Chart screenshot upload flow with trade notes, pair, risk, RR, session, selected emotions, and confirmation status
+- Rules settings for max risk, minimum RR, allowed sessions, allowed pairs, confirmation requirement, strict mode, and max trades per day
+- Deterministic rule engine for checklist pass/fail checks
 - AI analysis pipeline using OpenAI when configured
 - Mock AI responses when `OPENAI_API_KEY` is missing
 - Supabase schema for `profiles`, `trades`, `trading_rules`, and `ai_analysis`
@@ -79,18 +80,22 @@ supabase link --project-ref YOUR_PROJECT_REF
 
 ### 2. Apply database migrations
 
-Run the migration in [supabase/migrations/202605130001_create_tradeguardian_core.sql](./supabase/migrations/202605130001_create_tradeguardian_core.sql):
+Run all migrations in [supabase/migrations](./supabase/migrations):
 
 ```bash
 supabase db push
 ```
 
-This creates:
+This creates and updates:
 
 - `profiles`
 - `trades`
 - `trading_rules`
 - `ai_analysis`
+- chart screenshot storage policies
+- trade lifecycle fields
+- trade timezone support
+- checklist fields
 - `updated_at` triggers
 - Row Level Security policies
 - indexes for user-owned dashboard and journal queries
@@ -111,7 +116,7 @@ http://localhost:3000/**
 https://YOUR_VERCEL_DOMAIN/**
 ```
 
-Email/password auth is enough for this MVP.
+Email/password auth is enough for this MVP. Google login can be enabled in Supabase Auth providers when needed.
 
 ### 4. Create storage bucket
 
@@ -155,7 +160,7 @@ The app will run in demo mode without Supabase variables, but real auth and pers
 
 ## AI Setup
 
-Add `OPENAI_API_KEY` to enable OpenAI analysis. Without it, TradeGuardian returns deterministic mock coaching feedback so the product flow remains usable during local development.
+Add `OPENAI_API_KEY` to enable OpenAI analysis. Without it, Qyvex Edge returns deterministic mock coaching feedback so the product flow remains usable during local development.
 
 ## Verification
 

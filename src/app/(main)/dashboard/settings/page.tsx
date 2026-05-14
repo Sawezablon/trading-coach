@@ -21,7 +21,7 @@ export default async function SettingsPage({
       <div className="space-y-1">
         <h1 className="text-3xl tracking-tight">Rules</h1>
         <p className="text-muted-foreground text-sm">
-          Define the guardrails TradeGuardian uses to detect discipline breaks.
+          Define the guardrails Qyvex Edge uses to detect discipline breaks.
         </p>
       </div>
 
@@ -128,7 +128,7 @@ export default async function SettingsPage({
                 className="min-h-32"
               />
               <p className="text-muted-foreground text-xs">
-                Add one rule per line. TradeGuardian will include these in future AI reviews.
+                Add one rule per line. Qyvex Edge will include these in future AI reviews.
               </p>
             </div>
             <div className="space-y-2 md:col-span-2">

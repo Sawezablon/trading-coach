@@ -11,7 +11,10 @@ export default function Home() {
             <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-muted-foreground text-sm">
               Discipline assistant for rule-based traders
             </div>
-            <h1 className="max-w-2xl font-semibold text-5xl tracking-tight md:text-6xl">TradeGuardian AI</h1>
+            <div className="space-y-3">
+              <h1 className="max-w-2xl font-semibold text-5xl tracking-tight md:text-6xl">Qyvex Edge</h1>
+              <p className="font-medium text-xl">AI Trading Discipline Assistant</p>
+            </div>
             <p className="max-w-xl text-lg text-muted-foreground">
               An AI trading journal that helps traders stop breaking their own rules. No signals, no execution, no
               market predictions.
@@ -50,6 +53,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      <footer className="border-t px-6 py-5 text-muted-foreground text-sm lg:px-14">Qyvex Edge by Qyvex</footer>
     </main>
   );
 }

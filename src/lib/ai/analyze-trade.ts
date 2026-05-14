@@ -87,7 +87,7 @@ export async function analyzeTrade(input: AnalyzeTradeInput): Promise<Omit<AiAna
           content: [
             {
               type: "input_text",
-              text: `You are TradeGuardian AI, a discipline coach. Analyze this trade without giving signals or predictions. Return strict JSON with keys: setup_quality_score, discipline_score, strengths, weaknesses, detected_mistakes, rule_violations, emotional_observations, improvement_suggestions, recurring_mistakes.
+              text: `You are Qyvex Edge, a discipline coach from Qyvex. Analyze this trade without giving signals or predictions. Return strict JSON with keys: setup_quality_score, discipline_score, strengths, weaknesses, detected_mistakes, rule_violations, emotional_observations, improvement_suggestions, recurring_mistakes.
 
 Trade:
 Pair: ${input.pair}
