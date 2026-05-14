@@ -90,7 +90,8 @@ export default async function Page() {
                 <div>
                   <div className="font-medium">{trade.pair}</div>
                   <div className="text-muted-foreground text-sm">
-                    {trade.session} session · {trade.risk_percent}% risk · {trade.rr}R
+                    {new Date(trade.trade_taken_at).toLocaleString()} - {trade.session} session - {trade.risk_percent}%
+                    risk - {trade.rr}R
                   </div>
                 </div>
                 <Badge variant={analysis?.rule_violations.length ? "destructive" : "secondary"}>

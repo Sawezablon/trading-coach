@@ -14,13 +14,14 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
   }
 
   const analysis = getPrimaryAnalysis(trade);
+  const tradeTakenAt = new Date(trade.trade_taken_at);
 
   return (
     <div className="grid gap-6 xl:grid-cols-12">
       <div className="space-y-6 xl:col-span-7">
         <div className="space-y-1">
           <h1 className="text-3xl tracking-tight">{trade.pair}</h1>
-          <p className="text-muted-foreground text-sm">{new Date(trade.created_at).toLocaleString()}</p>
+          <p className="text-muted-foreground text-sm">{tradeTakenAt.toLocaleString()}</p>
         </div>
 
         <Card>
@@ -30,6 +31,8 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
           <CardContent className="grid gap-4 md:grid-cols-2">
             <Info label="Direction" value={trade.direction} />
             <Info label="Session" value={trade.session} />
+            <Info label="Trade date" value={tradeTakenAt.toLocaleDateString()} />
+            <Info label="Trade time" value={tradeTakenAt.toLocaleTimeString()} />
             <Info label="Risk" value={`${trade.risk_percent}%`} />
             <Info label="RR" value={`${trade.rr}R`} />
             <Info label="Outcome" value={trade.outcome} />

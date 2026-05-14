@@ -23,7 +23,22 @@ type TradeResponse = {
   error?: string;
 };
 
-export function TradeUploadForm({ rules, tradesToday }: { rules: RuleSettings; tradesToday: number }) {
+function toDatetimeLocalValue(date: Date) {
+  const offsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function sameLocalDate(a: string, b: string) {
+  const left = new Date(a);
+  const right = new Date(b);
+  if (Number.isNaN(left.getTime()) || Number.isNaN(right.getTime())) {
+    return false;
+  }
+
+  return left.toDateString() === right.toDateString();
+}
+
+export function TradeUploadForm({ rules, tradeTimestamps }: { rules: RuleSettings; tradeTimestamps: string[] }) {
   const router = useRouter();
   const inputId = useId();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -32,12 +47,17 @@ export function TradeUploadForm({ rules, tradesToday }: { rules: RuleSettings; t
   const [pending, setPending] = useState(false);
   const [pair, setPair] = useState("");
   const [direction, setDirection] = useState<TradeDirection>("long");
+  const [tradeTakenAt, setTradeTakenAt] = useState(() => toDatetimeLocalValue(new Date()));
   const [riskPercent, setRiskPercent] = useState(0);
   const [rr, setRr] = useState(0);
   const [session, setSession] = useState("London");
   const [emotions, setEmotions] = useState("");
   const [confirmation, setConfirmation] = useState(false);
   const [manualRuleIds, setManualRuleIds] = useState<string[]>([]);
+  const tradesToday = tradeTimestamps.filter((timestamp) => sameLocalDate(timestamp, tradeTakenAt)).length;
+  const tradeTakenAtIso = Number.isNaN(new Date(tradeTakenAt).getTime())
+    ? new Date().toISOString()
+    : new Date(tradeTakenAt).toISOString();
 
   const checklist = evaluateTradeChecklist(
     {
@@ -49,6 +69,7 @@ export function TradeUploadForm({ rules, tradesToday }: { rules: RuleSettings; t
       emotions,
       confirmation,
       hasScreenshot: Boolean(file),
+      trade_taken_at: tradeTakenAtIso,
       tradesToday,
       manualRuleIds,
     },
@@ -72,6 +93,20 @@ export function TradeUploadForm({ rules, tradesToday }: { rules: RuleSettings; t
     setPending(true);
 
     const formData = new FormData(event.currentTarget);
+    const submittedAt = new Date(tradeTakenAt);
+    if (Number.isNaN(submittedAt.getTime())) {
+      toast.error("Trade date & time is required.");
+      setPending(false);
+      return;
+    }
+
+    const dayStart = new Date(submittedAt);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    formData.set("trade_taken_at", submittedAt.toISOString());
+    formData.set("trade_day_start", dayStart.toISOString());
+    formData.set("trade_day_end", dayEnd.toISOString());
     formData.set("manual_rule_ids", manualRuleIds.join(","));
     if (file) {
       formData.set("screenshot", file);
@@ -136,6 +171,18 @@ export function TradeUploadForm({ rules, tradesToday }: { rules: RuleSettings; t
                   <SelectItem value="short">Short</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="trade_taken_at">Trade date &amp; time</Label>
+              <Input
+                id="trade_taken_at"
+                name="trade_taken_at"
+                type="datetime-local"
+                required
+                value={tradeTakenAt}
+                onChange={(event) => setTradeTakenAt(event.target.value)}
+              />
             </div>
 
             <div className="space-y-2">

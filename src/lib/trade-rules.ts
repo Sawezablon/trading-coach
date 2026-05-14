@@ -9,6 +9,7 @@ export type TradeRuleInput = {
   confirmation: boolean;
   emotions: string;
   hasScreenshot: boolean;
+  trade_taken_at: string;
   tradesToday?: number;
   manualRuleIds?: string[];
 };

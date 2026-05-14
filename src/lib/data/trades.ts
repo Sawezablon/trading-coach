@@ -44,7 +44,7 @@ export async function getTrades(): Promise<TradeWithAnalysis[]> {
   const { data, error } = await supabase
     .from("trades")
     .select("*, ai_analysis(*)")
-    .order("created_at", { ascending: false });
+    .order("trade_taken_at", { ascending: false });
 
   if (error) {
     throw new Error(error.message);

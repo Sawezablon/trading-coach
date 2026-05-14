@@ -63,6 +63,7 @@ export const demoTrades: TradeWithAnalysis[] = [
     failed_rules: [],
     checklist_completion_rate: 86,
     discipline_score: 72,
+    trade_taken_at: new Date("2026-05-12T09:15:00.000Z").toISOString(),
     created_at: new Date("2026-05-12T09:15:00.000Z").toISOString(),
     updated_at: new Date("2026-05-12T09:15:00.000Z").toISOString(),
     ai_analysis: [demoAnalysis],
@@ -85,6 +86,7 @@ export const demoTrades: TradeWithAnalysis[] = [
     failed_rules: ["Risk too high", "Minimum RR not met"],
     checklist_completion_rate: 57,
     discipline_score: 41,
+    trade_taken_at: new Date("2026-05-11T14:40:00.000Z").toISOString(),
     created_at: new Date("2026-05-11T14:40:00.000Z").toISOString(),
     updated_at: new Date("2026-05-11T14:40:00.000Z").toISOString(),
     ai_analysis: [
@@ -116,6 +118,7 @@ export const demoTrades: TradeWithAnalysis[] = [
     failed_rules: ["Entered outside allowed session"],
     checklist_completion_rate: 71,
     discipline_score: 63,
+    trade_taken_at: new Date("2026-05-10T03:05:00.000Z").toISOString(),
     created_at: new Date("2026-05-10T03:05:00.000Z").toISOString(),
     updated_at: new Date("2026-05-10T03:05:00.000Z").toISOString(),
     ai_analysis: [

@@ -56,6 +56,7 @@ create table if not exists public.trades (
   failed_rules text[] not null default '{}',
   checklist_completion_rate integer not null default 0 check (checklist_completion_rate between 0 and 100),
   discipline_score integer not null default 0 check (discipline_score between 0 and 100),
+  trade_taken_at timestamptz not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -81,6 +82,7 @@ create table if not exists public.ai_analysis (
 create index if not exists profiles_email_idx on public.profiles(email);
 create index if not exists trading_rules_user_id_idx on public.trading_rules(user_id);
 create index if not exists trades_user_created_idx on public.trades(user_id, created_at desc);
+create index if not exists trades_user_trade_taken_idx on public.trades(user_id, trade_taken_at desc);
 create index if not exists trades_user_pair_idx on public.trades(user_id, pair);
 create index if not exists trades_user_outcome_idx on public.trades(user_id, outcome);
 create index if not exists ai_analysis_user_created_idx on public.ai_analysis(user_id, created_at desc);

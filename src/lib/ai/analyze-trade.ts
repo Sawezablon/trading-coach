@@ -15,6 +15,7 @@ type AnalyzeTradeInput = {
   emotions: string;
   notes: string;
   confirmation: boolean;
+  trade_taken_at: string;
   imageDataUrl?: string | null;
   rules: RuleSettings;
   checklist?: {
@@ -86,6 +87,7 @@ export async function analyzeTrade(input: AnalyzeTradeInput): Promise<Omit<AiAna
 
 Trade:
 Pair: ${input.pair}
+Trade taken at: ${input.trade_taken_at}
 Risk: ${input.risk_percent}%
 RR: ${input.rr}
 Session: ${input.session}

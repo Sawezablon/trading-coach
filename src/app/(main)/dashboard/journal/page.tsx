@@ -35,7 +35,7 @@ export default async function JournalPage() {
               >
                 <div>
                   <div className="font-medium">{trade.pair}</div>
-                  <div className="text-muted-foreground text-sm">{new Date(trade.created_at).toLocaleString()}</div>
+                  <div className="text-muted-foreground text-sm">{new Date(trade.trade_taken_at).toLocaleString()}</div>
                 </div>
                 <Badge variant="outline">{trade.session}</Badge>
                 <Badge

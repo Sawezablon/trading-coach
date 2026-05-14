@@ -11,6 +11,11 @@ function asNumber(value: FormDataEntryValue | null, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function asIsoDateTime(value: FormDataEntryValue | null) {
+  const date = new Date(String(value ?? ""));
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 async function fileToDataUrl(file: File | null) {
   if (!file || file.size === 0) {
     return null;
@@ -27,6 +32,11 @@ export async function POST(request: Request) {
   const screenshotEntry = formData.get("screenshot");
   const screenshot = screenshotEntry instanceof File ? screenshotEntry : null;
   const imageDataUrl = await fileToDataUrl(screenshot);
+  const tradeTakenAt = asIsoDateTime(formData.get("trade_taken_at"));
+
+  if (!tradeTakenAt) {
+    return NextResponse.json({ error: "Trade date & time is required." }, { status: 400 });
+  }
 
   const tradeInput = {
     pair: String(formData.get("pair") ?? "XAUUSD").toUpperCase(),
@@ -38,6 +48,7 @@ export async function POST(request: Request) {
     notes: String(formData.get("notes") ?? ""),
     confirmation: formData.get("confirmation") === "on" || formData.get("confirmation") === "true",
     outcome: "open" as const,
+    trade_taken_at: tradeTakenAt,
   };
   const manualRuleIds = String(formData.get("manual_rule_ids") ?? "")
     .split(",")
@@ -121,12 +132,18 @@ export async function POST(request: Request) {
   }
 
   const startOfDay = new Date();
+  const submittedDayStart = asIsoDateTime(formData.get("trade_day_start"));
+  const submittedDayEnd = asIsoDateTime(formData.get("trade_day_end"));
+  startOfDay.setTime(new Date(tradeTakenAt).getTime());
   startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(startOfDay);
+  endOfDay.setDate(endOfDay.getDate() + 1);
   const { count: tradesToday } = await supabase
     .from("trades")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id)
-    .gte("created_at", startOfDay.toISOString());
+    .gte("trade_taken_at", submittedDayStart ?? startOfDay.toISOString())
+    .lt("trade_taken_at", submittedDayEnd ?? endOfDay.toISOString());
 
   const rules = rulesData as RuleSettings;
   const checklist = evaluateTradeChecklist(

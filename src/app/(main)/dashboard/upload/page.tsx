@@ -3,8 +3,7 @@ import { getRules, getTrades } from "@/lib/data/trades";
 
 export default async function Page() {
   const [rules, trades] = await Promise.all([getRules(), getTrades()]);
-  const today = new Date().toDateString();
-  const tradesToday = trades.filter((trade) => new Date(trade.created_at).toDateString() === today).length;
+  const tradeTimestamps = trades.map((trade) => trade.trade_taken_at);
 
   return (
     <div className="flex flex-col gap-6">
@@ -14,7 +13,7 @@ export default async function Page() {
           Upload a screenshot and journal the decision. TradeGuardian checks the entry against your rules.
         </p>
       </div>
-      <TradeUploadForm rules={rules} tradesToday={tradesToday} />
+      <TradeUploadForm rules={rules} tradeTimestamps={tradeTimestamps} />
     </div>
   );
 }
