@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { calculateDashboardMetrics, getPrimaryAnalysis, getTrades } from "@/lib/data/trades";
+import { formatTradeDateTime } from "@/lib/format-trade-time";
 
 export default async function Page() {
   const trades = await getTrades();
@@ -94,8 +95,8 @@ export default async function Page() {
                 <div>
                   <div className="font-medium">{trade.pair}</div>
                   <div className="text-muted-foreground text-sm">
-                    {new Date(trade.trade_taken_at).toLocaleString()} - {trade.session} session - {trade.risk_percent}%
-                    risk - {trade.rr}R
+                    {formatTradeDateTime(trade.trade_taken_at, trade.trade_timezone)} - {trade.session} session -{" "}
+                    {trade.risk_percent}% risk - {trade.rr}R
                   </div>
                 </div>
                 <TradeStatusBadge status={trade.status} />

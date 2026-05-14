@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTrades } from "@/lib/data/trades";
+import { formatTradeDateTime } from "@/lib/format-trade-time";
 
 export default async function JournalPage() {
   const trades = await getTrades();
@@ -37,7 +38,9 @@ export default async function JournalPage() {
                   <div className="font-medium">
                     {trade.pair} <span className="text-muted-foreground text-xs uppercase">{trade.direction}</span>
                   </div>
-                  <div className="text-muted-foreground text-sm">{new Date(trade.trade_taken_at).toLocaleString()}</div>
+                  <div className="text-muted-foreground text-sm">
+                    {formatTradeDateTime(trade.trade_taken_at, trade.trade_timezone)}
+                  </div>
                   <div className="mt-1 text-muted-foreground text-xs">
                     Risk {trade.risk_percent}% - planned {trade.rr}R
                     {trade.status === "closed" && trade.final_rr !== null ? ` - final ${trade.final_rr}R` : ""}

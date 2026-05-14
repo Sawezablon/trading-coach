@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { emotionOptions, parseEmotionValues } from "@/lib/emotions";
 import type { RuleSettings, Trade, TradeDirection, TradeResult, TradeStatus } from "@/lib/supabase/types";
 import { evaluateTradeChecklist } from "@/lib/trade-rules";
 
@@ -69,13 +70,17 @@ export function TradeUploadForm({ rules, tradeTimestamps, initialTrade }: TradeF
   const [riskPercent, setRiskPercent] = useState(Number(initialTrade?.risk_percent ?? 0));
   const [rr, setRr] = useState(Number(initialTrade?.rr ?? 0));
   const [session, setSession] = useState(initialTrade?.session ?? "London");
-  const [emotions, setEmotions] = useState(initialTrade?.emotions ?? "");
+  const [selectedEmotions, setSelectedEmotions] = useState<string[]>(() =>
+    parseEmotionValues(initialTrade?.emotions ?? ""),
+  );
   const [confirmation, setConfirmation] = useState(initialTrade?.confirmation ?? false);
   const [status, setStatus] = useState<TradeStatus>(initialTrade?.status ?? "open");
   const [outcome, setOutcome] = useState<TradeResult>(initialTrade?.outcome ?? "pending");
   const [closedAt, setClosedAt] = useState(() => optionalDateTimeValue(initialTrade?.closed_at));
   const [manualRuleIds, setManualRuleIds] = useState<string[]>(() => manualIdsFromTrade(initialTrade));
+  const tradeTimezone = initialTrade?.trade_timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
   const tradesToday = tradeTimestamps.filter((timestamp) => sameLocalDate(timestamp, tradeTakenAt)).length;
+  const emotions = selectedEmotions.join(",");
   const tradeTakenAtIso = Number.isNaN(new Date(tradeTakenAt).getTime())
     ? new Date().toISOString()
     : new Date(tradeTakenAt).toISOString();
@@ -135,8 +140,10 @@ export function TradeUploadForm({ rules, tradeTimestamps, initialTrade }: TradeF
     const dayEnd = new Date(dayStart);
     dayEnd.setDate(dayEnd.getDate() + 1);
     formData.set("trade_taken_at", submittedAt.toISOString());
+    formData.set("trade_timezone", tradeTimezone);
     formData.set("trade_day_start", dayStart.toISOString());
     formData.set("trade_day_end", dayEnd.toISOString());
+    formData.set("emotions", emotions);
     formData.set("status", status);
     formData.set("outcome", status === "open" ? "pending" : outcome);
     formData.set("manual_rule_ids", manualRuleIds.join(","));
@@ -322,16 +329,33 @@ export function TradeUploadForm({ rules, tradeTimestamps, initialTrade }: TradeF
               </Label>
             </div>
 
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="emotions">Emotions before trade</Label>
-              <Input
-                id="emotions"
-                name="emotions"
-                placeholder="Calm, focused, impatient..."
-                required
-                value={emotions}
-                onChange={(event) => setEmotions(event.target.value)}
-              />
+            <div className="space-y-3 md:col-span-2">
+              <Label>Emotions before trade</Label>
+              <div className="flex flex-wrap gap-2">
+                {emotionOptions.map((emotion) => {
+                  const selected = selectedEmotions.includes(emotion.value);
+
+                  return (
+                    <Button
+                      key={emotion.value}
+                      type="button"
+                      variant={selected ? "default" : "outline"}
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => {
+                        setSelectedEmotions((current) =>
+                          current.includes(emotion.value)
+                            ? current.filter((value) => value !== emotion.value)
+                            : [...current, emotion.value],
+                        );
+                      }}
+                    >
+                      {emotion.label}
+                    </Button>
+                  );
+                })}
+              </div>
+              <input type="hidden" name="emotions" value={emotions} />
             </div>
 
             <div className="space-y-2 md:col-span-2">

@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 
+import { getEmotionRisk } from "@/lib/emotions";
 import { env } from "@/lib/env";
 import type { AiAnalysis, ChecklistItemResult, RuleSettings, TradeDirection } from "@/lib/supabase/types";
 import { detectRuleViolations } from "@/lib/trade-rules";
@@ -32,8 +33,8 @@ function mockAnalysis(input: AnalyzeTradeInput): Omit<AiAnalysis, "id" | "create
   const ruleViolations =
     input.checklist?.failedRules ??
     detectRuleViolations({ ...input, hasScreenshot: Boolean(input.imageDataUrl) }, input.rules);
-  const emotionalRisk = /revenge|frustrated|angry|tilt|chasing|impatient/i.test(input.emotions);
-  const baseDiscipline = 92 - ruleViolations.length * 14 - (emotionalRisk ? 10 : 0);
+  const emotionalRisk = getEmotionRisk(input.emotions);
+  const baseDiscipline = 92 - ruleViolations.length * 14 - (emotionalRisk === "high-risk" ? 10 : 0);
   const disciplineScore = Math.max(20, Math.min(96, baseDiscipline));
   const setupQualityScore = Math.max(35, Math.min(90, 68 + (input.rr >= input.rules.min_rr ? 8 : -10)));
 
@@ -55,9 +56,12 @@ function mockAnalysis(input: AnalyzeTradeInput): Omit<AiAnalysis, "id" | "create
       ? ruleViolations
       : ["No major rule break detected in the submitted fields"],
     rule_violations: ruleViolations,
-    emotional_observations: emotionalRisk
-      ? ["Emotion notes suggest urgency or frustration before entry"]
-      : ["Emotional state appears stable from the submitted notes"],
+    emotional_observations:
+      emotionalRisk === "high-risk"
+        ? ["Selected emotions suggest a high-risk state before entry"]
+        : emotionalRisk === "warning"
+          ? ["Selected emotions suggest caution before entry"]
+          : ["Emotional state appears stable from the submitted notes"],
     improvement_suggestions: [
       "Write the invalidation level before entry",
       "Check risk, session, RR, and confirmation as a final pre-trade gate",

@@ -33,6 +33,7 @@ export type Trade = {
   checklist_completion_rate: number;
   discipline_score: number;
   trade_taken_at: string;
+  trade_timezone: string;
   created_at: string;
   updated_at: string;
 };
@@ -112,7 +113,18 @@ export type Database = {
       trades: {
         Row: Trade;
         Insert: Partial<Trade> &
-          Pick<Trade, "user_id" | "pair" | "risk_percent" | "rr" | "session" | "emotions" | "notes" | "trade_taken_at">;
+          Pick<
+            Trade,
+            | "user_id"
+            | "pair"
+            | "risk_percent"
+            | "rr"
+            | "session"
+            | "emotions"
+            | "notes"
+            | "trade_taken_at"
+            | "trade_timezone"
+          >;
         Update: Partial<Trade>;
         Relationships: [];
       };

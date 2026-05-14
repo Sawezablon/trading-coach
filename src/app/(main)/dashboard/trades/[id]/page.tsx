@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { getPrimaryAnalysis, getTrade } from "@/lib/data/trades";
+import { formatEmotions } from "@/lib/emotions";
+import { formatTradeDateTime, getTradeTimeZone } from "@/lib/format-trade-time";
 
 export default async function TradeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -18,8 +20,9 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
   }
 
   const analysis = getPrimaryAnalysis(trade);
-  const tradeTakenAt = new Date(trade.trade_taken_at);
-  const closedAt = trade.closed_at ? new Date(trade.closed_at) : null;
+  const tradeDateTime = formatTradeDateTime(trade.trade_taken_at, trade.trade_timezone);
+  const closedDateTime = trade.closed_at ? formatTradeDateTime(trade.closed_at, trade.trade_timezone) : null;
+  const tradeTimezone = getTradeTimeZone(trade);
 
   return (
     <div className="grid gap-6 xl:grid-cols-12">
@@ -31,7 +34,9 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
               <TradeStatusBadge status={trade.status} />
               <TradeOutcomeBadge outcome={trade.outcome} />
             </div>
-            <p className="text-muted-foreground text-sm">{tradeTakenAt.toLocaleString()}</p>
+            <p className="text-muted-foreground text-sm">
+              {tradeDateTime} - {tradeTimezone}
+            </p>
           </div>
           <div className="flex gap-2">
             <Button asChild variant="outline">
@@ -48,7 +53,7 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
           <CardContent className="grid gap-4 md:grid-cols-2">
             <Info label="Pair" value={trade.pair} />
             <Info label="Direction" value={trade.direction} />
-            <Info label="Entry date/time" value={tradeTakenAt.toLocaleString()} />
+            <Info label="Entry date/time" value={tradeDateTime} />
             <Info label="Entry price" value={trade.entry_price} />
             <Info label="Stop loss" value={trade.stop_loss} />
             <Info label="Take profit" value={trade.take_profit} />
@@ -58,7 +63,7 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
             <Info label="Confirmation" value={trade.confirmation ? "Yes" : "No"} />
             <div className="space-y-1 md:col-span-2">
               <div className="text-muted-foreground text-sm">Emotions before trade</div>
-              <div>{trade.emotions}</div>
+              <div>{formatEmotions(trade.emotions)}</div>
             </div>
             <div className="space-y-1 md:col-span-2">
               <div className="text-muted-foreground text-sm">Entry notes</div>
@@ -75,7 +80,7 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
             <CardContent className="grid gap-4 md:grid-cols-2">
               <Info label="Outcome" value={trade.outcome} />
               <Info label="Close price" value={trade.close_price} />
-              <Info label="Closed date/time" value={closedAt?.toLocaleString() ?? null} />
+              <Info label="Closed date/time" value={closedDateTime} />
               <Info
                 label="Profit/loss %"
                 value={trade.profit_loss_percent === null ? null : `${trade.profit_loss_percent}%`}

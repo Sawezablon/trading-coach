@@ -15,6 +15,7 @@ export type ParsedTradeForm = {
   status: TradeStatus;
   outcome: TradeResult;
   trade_taken_at: string;
+  trade_timezone: string;
   closed_at: string | null;
   close_price: number | null;
   profit_loss_percent: number | null;
@@ -51,6 +52,17 @@ function parseOutcome(value: FormDataEntryValue | null): TradeResult {
   return outcome === "win" || outcome === "loss" || outcome === "breakeven" ? outcome : "pending";
 }
 
+function parseTimezone(value: FormDataEntryValue | null) {
+  const timezone = String(value ?? "").trim();
+
+  try {
+    Intl.DateTimeFormat("en", { timeZone: timezone }).format(new Date());
+    return timezone;
+  } catch {
+    return "UTC";
+  }
+}
+
 export function parseTradeFormData(
   formData: FormData,
 ): { data: ParsedTradeForm; error: null } | { data: null; error: string } {
@@ -58,6 +70,12 @@ export function parseTradeFormData(
 
   if (!tradeTakenAt) {
     return { data: null, error: "Trade date & time is required." };
+  }
+
+  const emotions = String(formData.get("emotions") ?? "");
+
+  if (!emotions) {
+    return { data: null, error: "Choose at least one emotion before saving this trade." };
   }
 
   const status = parseStatus(formData.get("status"));
@@ -82,12 +100,13 @@ export function parseTradeFormData(
       risk_percent: asNumber(formData.get("risk_percent")),
       rr: asNumber(formData.get("rr")),
       session: String(formData.get("session") ?? "London"),
-      emotions: String(formData.get("emotions") ?? ""),
+      emotions,
       notes: String(formData.get("notes") ?? ""),
       confirmation: formData.get("confirmation") === "on" || formData.get("confirmation") === "true",
       status,
       outcome,
       trade_taken_at: tradeTakenAt,
+      trade_timezone: parseTimezone(formData.get("trade_timezone")),
       closed_at: closedAt,
       close_price: status === "closed" ? asOptionalNumber(formData.get("close_price")) : null,
       profit_loss_percent: status === "closed" ? asOptionalNumber(formData.get("profit_loss_percent")) : null,
