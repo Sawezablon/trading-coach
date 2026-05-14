@@ -43,13 +43,23 @@ create table if not exists public.trades (
   user_id uuid not null references public.profiles(id) on delete cascade,
   pair text not null,
   direction text not null default 'long' check (direction in ('long', 'short')),
+  entry_price numeric,
+  stop_loss numeric,
+  take_profit numeric,
   risk_percent numeric(5,2) not null check (risk_percent >= 0),
   rr numeric(6,2) not null check (rr >= 0),
   session text not null,
   emotions text not null,
   notes text not null,
   confirmation boolean not null default false,
-  outcome text not null default 'open' check (outcome in ('win', 'loss', 'breakeven', 'open')),
+  status text not null default 'open' check (status in ('open', 'closed')),
+  outcome text not null default 'pending' check (outcome in ('pending', 'win', 'loss', 'breakeven')),
+  closed_at timestamptz,
+  close_price numeric,
+  profit_loss_percent numeric,
+  profit_loss_amount numeric,
+  final_rr numeric,
+  closing_notes text,
   screenshot_url text,
   checklist_results jsonb not null default '[]',
   passed_rules text[] not null default '{}',
@@ -58,7 +68,11 @@ create table if not exists public.trades (
   discipline_score integer not null default 0 check (discipline_score between 0 and 100),
   trade_taken_at timestamptz not null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint trades_status_outcome_check check (
+    (status = 'open' and outcome = 'pending')
+    or (status = 'closed' and outcome in ('win', 'loss', 'breakeven'))
+  )
 );
 
 create table if not exists public.ai_analysis (
@@ -83,6 +97,7 @@ create index if not exists profiles_email_idx on public.profiles(email);
 create index if not exists trading_rules_user_id_idx on public.trading_rules(user_id);
 create index if not exists trades_user_created_idx on public.trades(user_id, created_at desc);
 create index if not exists trades_user_trade_taken_idx on public.trades(user_id, trade_taken_at desc);
+create index if not exists trades_user_status_idx on public.trades(user_id, status);
 create index if not exists trades_user_pair_idx on public.trades(user_id, pair);
 create index if not exists trades_user_outcome_idx on public.trades(user_id, outcome);
 create index if not exists ai_analysis_user_created_idx on public.ai_analysis(user_id, created_at desc);

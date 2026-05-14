@@ -15,12 +15,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { RuleSettings, TradeDirection } from "@/lib/supabase/types";
+import type { RuleSettings, Trade, TradeDirection, TradeResult, TradeStatus } from "@/lib/supabase/types";
 import { evaluateTradeChecklist } from "@/lib/trade-rules";
 
 type TradeResponse = {
   trade?: { id: string };
   error?: string;
+};
+
+type TradeFormProps = {
+  rules: RuleSettings;
+  tradeTimestamps: string[];
+  initialTrade?: Trade;
 };
 
 function toDatetimeLocalValue(date: Date) {
@@ -38,22 +44,37 @@ function sameLocalDate(a: string, b: string) {
   return left.toDateString() === right.toDateString();
 }
 
-export function TradeUploadForm({ rules, tradeTimestamps }: { rules: RuleSettings; tradeTimestamps: string[] }) {
+function manualIdsFromTrade(trade: Trade | undefined) {
+  return (trade?.checklist_results ?? [])
+    .filter((item) => item.type === "manual" && item.status === "passed")
+    .map((item) => item.id);
+}
+
+function optionalDateTimeValue(value: string | null | undefined) {
+  return value ? toDatetimeLocalValue(new Date(value)) : "";
+}
+
+export function TradeUploadForm({ rules, tradeTimestamps, initialTrade }: TradeFormProps) {
   const router = useRouter();
   const inputId = useId();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(initialTrade?.screenshot_url ?? null);
   const [pending, setPending] = useState(false);
-  const [pair, setPair] = useState("");
-  const [direction, setDirection] = useState<TradeDirection>("long");
-  const [tradeTakenAt, setTradeTakenAt] = useState(() => toDatetimeLocalValue(new Date()));
-  const [riskPercent, setRiskPercent] = useState(0);
-  const [rr, setRr] = useState(0);
-  const [session, setSession] = useState("London");
-  const [emotions, setEmotions] = useState("");
-  const [confirmation, setConfirmation] = useState(false);
-  const [manualRuleIds, setManualRuleIds] = useState<string[]>([]);
+  const [pair, setPair] = useState(initialTrade?.pair ?? "");
+  const [direction, setDirection] = useState<TradeDirection>(initialTrade?.direction ?? "long");
+  const [tradeTakenAt, setTradeTakenAt] = useState(() =>
+    initialTrade ? toDatetimeLocalValue(new Date(initialTrade.trade_taken_at)) : toDatetimeLocalValue(new Date()),
+  );
+  const [riskPercent, setRiskPercent] = useState(Number(initialTrade?.risk_percent ?? 0));
+  const [rr, setRr] = useState(Number(initialTrade?.rr ?? 0));
+  const [session, setSession] = useState(initialTrade?.session ?? "London");
+  const [emotions, setEmotions] = useState(initialTrade?.emotions ?? "");
+  const [confirmation, setConfirmation] = useState(initialTrade?.confirmation ?? false);
+  const [status, setStatus] = useState<TradeStatus>(initialTrade?.status ?? "open");
+  const [outcome, setOutcome] = useState<TradeResult>(initialTrade?.outcome ?? "pending");
+  const [closedAt, setClosedAt] = useState(() => optionalDateTimeValue(initialTrade?.closed_at));
+  const [manualRuleIds, setManualRuleIds] = useState<string[]>(() => manualIdsFromTrade(initialTrade));
   const tradesToday = tradeTimestamps.filter((timestamp) => sameLocalDate(timestamp, tradeTakenAt)).length;
   const tradeTakenAtIso = Number.isNaN(new Date(tradeTakenAt).getTime())
     ? new Date().toISOString()
@@ -68,7 +89,7 @@ export function TradeUploadForm({ rules, tradeTimestamps }: { rules: RuleSetting
       session,
       emotions,
       confirmation,
-      hasScreenshot: Boolean(file),
+      hasScreenshot: Boolean(file || initialTrade?.screenshot_url),
       trade_taken_at: tradeTakenAtIso,
       tradesToday,
       manualRuleIds,
@@ -79,7 +100,6 @@ export function TradeUploadForm({ rules, tradeTimestamps }: { rules: RuleSetting
 
   useEffect(() => {
     if (!file) {
-      setPreviewUrl(null);
       return;
     }
 
@@ -87,6 +107,16 @@ export function TradeUploadForm({ rules, tradeTimestamps }: { rules: RuleSetting
     setPreviewUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [file]);
+
+  useEffect(() => {
+    if (status === "open") {
+      setOutcome("pending");
+      setClosedAt("");
+    } else if (outcome === "pending") {
+      setOutcome("win");
+      setClosedAt((current) => current || toDatetimeLocalValue(new Date()));
+    }
+  }, [outcome, status]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -107,9 +137,21 @@ export function TradeUploadForm({ rules, tradeTimestamps }: { rules: RuleSetting
     formData.set("trade_taken_at", submittedAt.toISOString());
     formData.set("trade_day_start", dayStart.toISOString());
     formData.set("trade_day_end", dayEnd.toISOString());
+    formData.set("status", status);
+    formData.set("outcome", status === "open" ? "pending" : outcome);
     formData.set("manual_rule_ids", manualRuleIds.join(","));
     if (file) {
       formData.set("screenshot", file);
+    }
+
+    if (status === "closed") {
+      const closedDate = new Date(closedAt);
+      if (outcome === "pending" || Number.isNaN(closedDate.getTime())) {
+        toast.error("Closed trades need an outcome and closed date & time.");
+        setPending(false);
+        return;
+      }
+      formData.set("closed_at", closedDate.toISOString());
     }
 
     if (rules.strict_mode && hasRequiredFailures) {
@@ -118,8 +160,8 @@ export function TradeUploadForm({ rules, tradeTimestamps }: { rules: RuleSetting
       return;
     }
 
-    const response = await fetch("/api/trades", {
-      method: "POST",
+    const response = await fetch(initialTrade ? `/api/trades/${initialTrade.id}` : "/api/trades", {
+      method: initialTrade ? "PATCH" : "POST",
       body: formData,
     });
     const payload = (await response.json()) as TradeResponse;
@@ -130,7 +172,7 @@ export function TradeUploadForm({ rules, tradeTimestamps }: { rules: RuleSetting
       return;
     }
 
-    toast.success("Trade logged and analyzed.");
+    toast.success(initialTrade ? "Trade updated." : "Trade logged and analyzed.");
     router.push(`/dashboard/trades/${payload.trade.id}`);
     router.refresh();
   }
@@ -182,6 +224,45 @@ export function TradeUploadForm({ rules, tradeTimestamps }: { rules: RuleSetting
                 required
                 value={tradeTakenAt}
                 onChange={(event) => setTradeTakenAt(event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="entry_price">Entry price</Label>
+              <Input
+                id="entry_price"
+                name="entry_price"
+                type="number"
+                step="0.00001"
+                min="0"
+                placeholder="Optional"
+                defaultValue={initialTrade?.entry_price ?? ""}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="stop_loss">Stop loss</Label>
+              <Input
+                id="stop_loss"
+                name="stop_loss"
+                type="number"
+                step="0.00001"
+                min="0"
+                placeholder="Optional"
+                defaultValue={initialTrade?.stop_loss ?? ""}
+              />
+            </div>
+
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="take_profit">Take profit</Label>
+              <Input
+                id="take_profit"
+                name="take_profit"
+                type="number"
+                step="0.00001"
+                min="0"
+                placeholder="Optional"
+                defaultValue={initialTrade?.take_profit ?? ""}
               />
             </div>
 
@@ -260,8 +341,117 @@ export function TradeUploadForm({ rules, tradeTimestamps }: { rules: RuleSetting
                 name="notes"
                 placeholder="Setup, entry reason, invalidation, management notes..."
                 required
+                defaultValue={initialTrade?.notes ?? ""}
               />
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="status">Status</Label>
+              <Select name="status" value={status} onValueChange={(value) => setStatus(value as TradeStatus)}>
+                <SelectTrigger id="status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="closed">Closed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="outcome">Outcome</Label>
+              <Select
+                name="outcome"
+                value={outcome}
+                disabled={status === "open"}
+                onValueChange={(value) => setOutcome(value as TradeResult)}
+              >
+                <SelectTrigger id="outcome">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="win">Win</SelectItem>
+                  <SelectItem value="loss">Loss</SelectItem>
+                  <SelectItem value="breakeven">Breakeven</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {status === "closed" ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="closed_at">Closed date &amp; time</Label>
+                  <Input
+                    id="closed_at"
+                    name="closed_at"
+                    type="datetime-local"
+                    required
+                    value={closedAt}
+                    onChange={(event) => setClosedAt(event.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="close_price">Close price</Label>
+                  <Input
+                    id="close_price"
+                    name="close_price"
+                    type="number"
+                    step="0.00001"
+                    min="0"
+                    placeholder="Optional"
+                    defaultValue={initialTrade?.close_price ?? ""}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="profit_loss_percent">Profit/loss %</Label>
+                  <Input
+                    id="profit_loss_percent"
+                    name="profit_loss_percent"
+                    type="number"
+                    step="0.01"
+                    placeholder="Optional"
+                    defaultValue={initialTrade?.profit_loss_percent ?? ""}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="profit_loss_amount">Profit/loss amount</Label>
+                  <Input
+                    id="profit_loss_amount"
+                    name="profit_loss_amount"
+                    type="number"
+                    step="0.01"
+                    placeholder="Optional"
+                    defaultValue={initialTrade?.profit_loss_amount ?? ""}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="final_rr">Final RR achieved</Label>
+                  <Input
+                    id="final_rr"
+                    name="final_rr"
+                    type="number"
+                    step="0.1"
+                    placeholder="Optional"
+                    defaultValue={initialTrade?.final_rr ?? ""}
+                  />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="closing_notes">Closing notes</Label>
+                  <Textarea
+                    id="closing_notes"
+                    name="closing_notes"
+                    placeholder="Exit reason, management notes, lessons..."
+                    defaultValue={initialTrade?.closing_notes ?? ""}
+                  />
+                </div>
+              </>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -299,7 +489,7 @@ export function TradeUploadForm({ rules, tradeTimestamps }: { rules: RuleSetting
 
             <Button type="submit" className="w-full" disabled={pending}>
               {pending ? <Loader2 className="animate-spin" /> : null}
-              {pending ? "Analyzing..." : "Save trade and analyze"}
+              {pending ? "Saving..." : initialTrade ? "Save changes" : "Save trade and analyze"}
             </Button>
           </CardContent>
         </Card>

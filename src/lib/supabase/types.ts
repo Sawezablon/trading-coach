@@ -1,6 +1,7 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-export type TradeOutcome = "win" | "loss" | "breakeven" | "open";
+export type TradeStatus = "open" | "closed";
+export type TradeResult = "pending" | "win" | "loss" | "breakeven";
 export type TradeDirection = "long" | "short";
 
 export type Trade = {
@@ -8,13 +9,23 @@ export type Trade = {
   user_id: string;
   pair: string;
   direction: TradeDirection;
+  entry_price: number | null;
+  stop_loss: number | null;
+  take_profit: number | null;
   risk_percent: number;
   rr: number;
   session: string;
   emotions: string;
   notes: string;
   confirmation: boolean;
-  outcome: TradeOutcome;
+  status: TradeStatus;
+  outcome: TradeResult;
+  closed_at: string | null;
+  close_price: number | null;
+  profit_loss_percent: number | null;
+  profit_loss_amount: number | null;
+  final_rr: number | null;
+  closing_notes: string | null;
   screenshot_url: string | null;
   checklist_results: ChecklistItemResult[];
   passed_rules: string[];

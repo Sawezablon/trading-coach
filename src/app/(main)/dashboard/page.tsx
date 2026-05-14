@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { DisciplineChart } from "@/app/(main)/dashboard/_components/discipline-chart";
+import { TradeOutcomeBadge, TradeStatusBadge } from "@/components/trade-lifecycle-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,13 +35,16 @@ export default async function Page() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard title="Total trades" value={metrics.totalTrades} signal="TR" />
+        <MetricCard title="Open trades" value={metrics.openTrades} signal="OP" />
+        <MetricCard title="Closed trades" value={metrics.closedTrades} signal="CL" />
+        <MetricCard title="Wins" value={metrics.wins} signal="W" />
+        <MetricCard title="Losses" value={metrics.losses} signal="L" />
+        <MetricCard title="Breakevens" value={metrics.breakevens} signal="BE" />
         <MetricCard title="Win rate" value={`${metrics.winRate}%`} signal="WR" />
-        <MetricCard title="Violations" value={metrics.ruleViolations} signal="RV" />
-        <MetricCard title="Best setup" value={metrics.bestSetup} signal="BS" />
+        <MetricCard title="Avg final RR" value={`${metrics.averageFinalRr}R`} signal="RR" />
+        <MetricCard title="Total P/L" value={metrics.totalProfitLoss} signal="PL" />
+        <MetricCard title="Violation rate" value={`${metrics.ruleViolationRate}%`} signal="RV" />
         <MetricCard title="Discipline" value={`${metrics.avgDiscipline}%`} signal="DS" />
-        <MetricCard title="Checklist" value={`${metrics.avgChecklistCompletion}%`} signal="CL" />
-        <MetricCard title="Failed-rule trades" value={metrics.failedRuleTrades} signal="FR" />
-        <MetricCard title="Most failed" value={metrics.mostFailedChecklistItem} signal="MF" />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-12">
@@ -94,9 +98,8 @@ export default async function Page() {
                     risk - {trade.rr}R
                   </div>
                 </div>
-                <Badge variant={analysis?.rule_violations.length ? "destructive" : "secondary"}>
-                  {analysis?.rule_violations.length ?? 0} violations
-                </Badge>
+                <TradeStatusBadge status={trade.status} />
+                <TradeOutcomeBadge outcome={trade.outcome} />
                 <Badge variant="outline">{analysis?.discipline_score ?? 0}% discipline</Badge>
               </Link>
             );

@@ -6,8 +6,16 @@ import type { AiAnalysis, RuleSettings, TradeWithAnalysis } from "@/lib/supabase
 
 export type DashboardMetrics = {
   totalTrades: number;
+  openTrades: number;
+  closedTrades: number;
+  wins: number;
+  losses: number;
+  breakevens: number;
   winRate: number;
+  averageFinalRr: number;
+  totalProfitLoss: number;
   ruleViolations: number;
+  ruleViolationRate: number;
   bestSetup: string;
   avgDiscipline: number;
   avgChecklistCompletion: number;
@@ -103,10 +111,16 @@ export function getPrimaryAnalysis(trade: TradeWithAnalysis): AiAnalysis | null 
 }
 
 export function calculateDashboardMetrics(trades: TradeWithAnalysis[]): DashboardMetrics {
-  const closedTrades = trades.filter((trade) => trade.outcome !== "open");
+  const openTrades = trades.filter((trade) => trade.status === "open");
+  const closedTrades = trades.filter((trade) => trade.status === "closed");
   const wins = closedTrades.filter((trade) => trade.outcome === "win").length;
+  const losses = closedTrades.filter((trade) => trade.outcome === "loss").length;
+  const breakevens = closedTrades.filter((trade) => trade.outcome === "breakeven").length;
   const analyses = trades.map(getPrimaryAnalysis).filter(Boolean) as AiAnalysis[];
   const ruleViolations = analyses.reduce((sum, analysis) => sum + analysis.rule_violations.length, 0);
+  const tradesWithViolations = trades.filter(
+    (trade) => (trade.failed_rules?.length ?? 0) > 0 || (getPrimaryAnalysis(trade)?.rule_violations.length ?? 0) > 0,
+  ).length;
   const pairCounts = trades.reduce<Record<string, number>>((acc, trade) => {
     acc[trade.pair] = (acc[trade.pair] ?? 0) + 1;
     return acc;
@@ -126,11 +140,30 @@ export function calculateDashboardMetrics(trades: TradeWithAnalysis[]): Dashboar
       return acc;
     }, {});
   const mostFailedChecklistItem = Object.entries(failedCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "No failed rules";
+  const closedWithFinalRr = closedTrades.filter((trade) => trade.final_rr !== null);
+  const averageFinalRr = closedWithFinalRr.length
+    ? Number(
+        (
+          closedWithFinalRr.reduce((sum, trade) => sum + Number(trade.final_rr ?? 0), 0) / closedWithFinalRr.length
+        ).toFixed(2),
+      )
+    : 0;
+  const totalProfitLoss = Number(
+    closedTrades.reduce((sum, trade) => sum + Number(trade.profit_loss_amount ?? 0), 0).toFixed(2),
+  );
 
   return {
     totalTrades: trades.length,
+    openTrades: openTrades.length,
+    closedTrades: closedTrades.length,
+    wins,
+    losses,
+    breakevens,
     winRate: closedTrades.length ? Math.round((wins / closedTrades.length) * 100) : 0,
+    averageFinalRr,
+    totalProfitLoss,
     ruleViolations,
+    ruleViolationRate: trades.length ? Math.round((tradesWithViolations / trades.length) * 100) : 0,
     bestSetup,
     avgDiscipline,
     avgChecklistCompletion,

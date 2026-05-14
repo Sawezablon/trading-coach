@@ -1,9 +1,11 @@
 import Link from "next/link";
 
+import { DeleteTradeButton } from "@/app/(main)/dashboard/trades/_components/delete-trade-button";
+import { TradeOutcomeBadge, TradeStatusBadge } from "@/components/trade-lifecycle-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPrimaryAnalysis, getTrades } from "@/lib/data/trades";
+import { getTrades } from "@/lib/data/trades";
 
 export default async function JournalPage() {
   const trades = await getTrades();
@@ -26,27 +28,34 @@ export default async function JournalPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {trades.map((trade) => {
-            const analysis = getPrimaryAnalysis(trade);
             return (
-              <Link
+              <div
                 key={trade.id}
-                href={`/dashboard/trades/${trade.id}`}
-                className="grid gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/50 lg:grid-cols-[1fr_auto_auto_auto]"
+                className="grid gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/50 xl:grid-cols-[1.2fr_auto_auto_auto_auto]"
               >
                 <div>
-                  <div className="font-medium">{trade.pair}</div>
+                  <div className="font-medium">
+                    {trade.pair} <span className="text-muted-foreground text-xs uppercase">{trade.direction}</span>
+                  </div>
                   <div className="text-muted-foreground text-sm">{new Date(trade.trade_taken_at).toLocaleString()}</div>
+                  <div className="mt-1 text-muted-foreground text-xs">
+                    Risk {trade.risk_percent}% - planned {trade.rr}R
+                    {trade.status === "closed" && trade.final_rr !== null ? ` - final ${trade.final_rr}R` : ""}
+                  </div>
                 </div>
-                <Badge variant="outline">{trade.session}</Badge>
-                <Badge
-                  variant={trade.outcome === "win" ? "default" : trade.outcome === "loss" ? "destructive" : "secondary"}
-                >
-                  {trade.outcome}
-                </Badge>
-                <Badge variant={analysis?.rule_violations.length ? "destructive" : "secondary"}>
-                  {analysis?.rule_violations.length ?? 0} violations
-                </Badge>
-              </Link>
+                <TradeStatusBadge status={trade.status} />
+                <TradeOutcomeBadge outcome={trade.outcome} />
+                <Badge variant="outline">{trade.discipline_score ?? 0}% discipline</Badge>
+                <div className="flex gap-2">
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/dashboard/trades/${trade.id}`}>Open</Link>
+                  </Button>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/dashboard/trades/${trade.id}/edit`}>Edit</Link>
+                  </Button>
+                  <DeleteTradeButton tradeId={trade.id} compact />
+                </div>
+              </div>
             );
           })}
         </CardContent>

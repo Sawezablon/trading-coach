@@ -3,18 +3,9 @@ import { NextResponse } from "next/server";
 import { analyzeTrade } from "@/lib/ai/analyze-trade";
 import { demoRules } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { RuleSettings, TradeDirection } from "@/lib/supabase/types";
+import type { RuleSettings } from "@/lib/supabase/types";
+import { asIsoDateTime, parseTradeFormData } from "@/lib/trade-form";
 import { evaluateTradeChecklist } from "@/lib/trade-rules";
-
-function asNumber(value: FormDataEntryValue | null, fallback = 0) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function asIsoDateTime(value: FormDataEntryValue | null) {
-  const date = new Date(String(value ?? ""));
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
 
 async function fileToDataUrl(file: File | null) {
   if (!file || file.size === 0) {
@@ -32,24 +23,13 @@ export async function POST(request: Request) {
   const screenshotEntry = formData.get("screenshot");
   const screenshot = screenshotEntry instanceof File ? screenshotEntry : null;
   const imageDataUrl = await fileToDataUrl(screenshot);
-  const tradeTakenAt = asIsoDateTime(formData.get("trade_taken_at"));
+  const parsed = parseTradeFormData(formData);
 
-  if (!tradeTakenAt) {
-    return NextResponse.json({ error: "Trade date & time is required." }, { status: 400 });
+  if (!parsed.data) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
-  const tradeInput = {
-    pair: String(formData.get("pair") ?? "XAUUSD").toUpperCase(),
-    direction: (String(formData.get("direction") ?? "long") === "short" ? "short" : "long") as TradeDirection,
-    risk_percent: asNumber(formData.get("risk_percent")),
-    rr: asNumber(formData.get("rr")),
-    session: String(formData.get("session") ?? "London"),
-    emotions: String(formData.get("emotions") ?? ""),
-    notes: String(formData.get("notes") ?? ""),
-    confirmation: formData.get("confirmation") === "on" || formData.get("confirmation") === "true",
-    outcome: "open" as const,
-    trade_taken_at: tradeTakenAt,
-  };
+  const tradeInput = parsed.data;
   const manualRuleIds = String(formData.get("manual_rule_ids") ?? "")
     .split(",")
     .map((id) => id.trim())
@@ -134,7 +114,7 @@ export async function POST(request: Request) {
   const startOfDay = new Date();
   const submittedDayStart = asIsoDateTime(formData.get("trade_day_start"));
   const submittedDayEnd = asIsoDateTime(formData.get("trade_day_end"));
-  startOfDay.setTime(new Date(tradeTakenAt).getTime());
+  startOfDay.setTime(new Date(tradeInput.trade_taken_at).getTime());
   startOfDay.setHours(0, 0, 0, 0);
   const endOfDay = new Date(startOfDay);
   endOfDay.setDate(endOfDay.getDate() + 1);
