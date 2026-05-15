@@ -68,6 +68,12 @@ create table if not exists public.trades (
   discipline_score integer not null default 0 check (discipline_score between 0 and 100),
   trade_taken_at timestamptz not null,
   trade_timezone text not null default 'UTC',
+  mt5_ticket text,
+  mt5_account text,
+  mt5_broker text,
+  synced_from_mt5 boolean not null default false,
+  last_synced_at timestamptz,
+  mt5_raw_data jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint trades_status_outcome_check check (
@@ -94,6 +100,19 @@ create table if not exists public.ai_analysis (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.mt5_connections (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  api_key_hash text not null,
+  account_number text,
+  broker text,
+  last_sync_at timestamptz,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint mt5_connections_user_unique unique (user_id)
+);
+
 create index if not exists profiles_email_idx on public.profiles(email);
 create index if not exists trading_rules_user_id_idx on public.trading_rules(user_id);
 create index if not exists trades_user_created_idx on public.trades(user_id, created_at desc);
@@ -101,8 +120,13 @@ create index if not exists trades_user_trade_taken_idx on public.trades(user_id,
 create index if not exists trades_user_status_idx on public.trades(user_id, status);
 create index if not exists trades_user_pair_idx on public.trades(user_id, pair);
 create index if not exists trades_user_outcome_idx on public.trades(user_id, outcome);
+create index if not exists trades_user_mt5_ticket_idx on public.trades(user_id, mt5_ticket) where mt5_ticket is not null;
+create index if not exists trades_user_synced_from_mt5_idx on public.trades(user_id, synced_from_mt5);
+create unique index if not exists trades_user_mt5_identity_unique on public.trades(user_id, mt5_account, mt5_ticket) where mt5_account is not null and mt5_ticket is not null;
 create index if not exists ai_analysis_user_created_idx on public.ai_analysis(user_id, created_at desc);
 create index if not exists ai_analysis_trade_id_idx on public.ai_analysis(trade_id);
+create index if not exists mt5_connections_user_id_idx on public.mt5_connections(user_id);
+create index if not exists mt5_connections_api_key_hash_idx on public.mt5_connections(api_key_hash) where is_active = true;
 
 drop trigger if exists set_profiles_updated_at on public.profiles;
 create trigger set_profiles_updated_at
@@ -124,10 +148,16 @@ create trigger set_ai_analysis_updated_at
   before update on public.ai_analysis
   for each row execute function public.set_updated_at();
 
+drop trigger if exists set_mt5_connections_updated_at on public.mt5_connections;
+create trigger set_mt5_connections_updated_at
+  before update on public.mt5_connections
+  for each row execute function public.set_updated_at();
+
 alter table public.profiles enable row level security;
 alter table public.trading_rules enable row level security;
 alter table public.trades enable row level security;
 alter table public.ai_analysis enable row level security;
+alter table public.mt5_connections enable row level security;
 
 drop policy if exists "Profiles are self-owned" on public.profiles;
 create policy "Profiles are self-owned" on public.profiles
@@ -149,6 +179,12 @@ create policy "Trades are self-owned" on public.trades
 
 drop policy if exists "AI analysis is self-owned" on public.ai_analysis;
 create policy "AI analysis is self-owned" on public.ai_analysis
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "MT5 connections are self-owned" on public.mt5_connections;
+create policy "MT5 connections are self-owned" on public.mt5_connections
   for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);

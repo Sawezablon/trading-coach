@@ -34,6 +34,12 @@ export type Trade = {
   discipline_score: number;
   trade_taken_at: string;
   trade_timezone: string;
+  mt5_ticket: string | null;
+  mt5_account: string | null;
+  mt5_broker: string | null;
+  synced_from_mt5: boolean;
+  last_synced_at: string | null;
+  mt5_raw_data: Json | null;
   created_at: string;
   updated_at: string;
 };
@@ -71,6 +77,18 @@ export type AiAnalysis = {
   recurring_mistakes: string[];
   model: string;
   created_at: string;
+};
+
+export type Mt5Connection = {
+  id: string;
+  user_id: string;
+  api_key_hash: string;
+  account_number: string | null;
+  broker: string | null;
+  last_sync_at: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ChecklistItemResult = {
@@ -152,6 +170,12 @@ export type Database = {
             | "recurring_mistakes"
           >;
         Update: Partial<AiAnalysis>;
+        Relationships: [];
+      };
+      mt5_connections: {
+        Row: Mt5Connection;
+        Insert: Partial<Mt5Connection> & Pick<Mt5Connection, "user_id" | "api_key_hash">;
+        Update: Partial<Mt5Connection>;
         Relationships: [];
       };
     };

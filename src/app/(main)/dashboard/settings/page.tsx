@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { saveRulesAction } from "@/app/(main)/dashboard/settings/actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -19,10 +21,17 @@ export default async function SettingsPage({
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <div className="space-y-1">
-        <h1 className="text-3xl tracking-tight">Rules</h1>
+        <div className="text-muted-foreground text-sm">Settings</div>
+        <h1 className="font-semibold text-4xl tracking-tight">Rules</h1>
         <p className="text-muted-foreground text-sm">
           Define the guardrails Qyvex Edge uses to detect discipline breaks.
         </p>
+      </div>
+
+      <div>
+        <Button asChild variant="outline">
+          <Link href="/dashboard/settings/mt5">MT5 Sync settings</Link>
+        </Button>
       </div>
 
       {params.saved ? (

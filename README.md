@@ -170,3 +170,68 @@ npm run build
 ```
 
 This Windows workspace currently needs Webpack mode for Next builds, so the build script uses `next build --webpack`.
+
+## MT5 Sync Developer Test
+
+Start the app locally:
+
+```bash
+npm run dev
+```
+
+In another terminal, run:
+
+```bash
+npm run test:mt5-sync
+```
+
+The script seeds a development MT5 API key for a Supabase user, sends:
+
+- 1 open trade
+- 1 closed winning trade
+- 1 closed losing trade
+
+Then it sends the same payload again and verifies duplicate sync updates the existing trades instead of creating duplicates. It also checks the synced trades match the journal lifecycle states and dashboard metrics.
+
+Optional environment variables:
+
+```bash
+MT5_TEST_USER_EMAIL=your-test-user@example.com
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+If `MT5_TEST_USER_EMAIL` is not set, the script uses the first Supabase auth user in the project.
+
+## MT5 Expert Advisor Setup
+
+The read-only Expert Advisor is available at:
+
+```text
+mt5/QyvexEdgeSyncEA.mq5
+```
+
+To install it:
+
+1. In MetaTrader 5, open **File > Open Data Folder**.
+2. Copy `QyvexEdgeSyncEA.mq5` into `MQL5/Experts`.
+3. Open MetaEditor, compile the EA, then attach it to any chart.
+4. In Qyvex Edge, open **Settings > MT5 Sync**, generate an API key, and copy the Sync URL.
+5. In the EA inputs, set:
+
+```text
+QyvexApiKey = your generated API key
+SyncUrl = https://YOUR_QYVEX_DOMAIN/api/mt5/sync
+SyncIntervalMinutes = 5
+```
+
+Before the EA can send data, enable WebRequest in MetaTrader:
+
+1. Go to **Tools > Options > Expert Advisors**.
+2. Enable **Allow WebRequest for listed URL**.
+3. Add your Qyvex domain URL, for example:
+
+```text
+https://YOUR_QYVEX_DOMAIN
+```
+
+The EA is read-only. It collects open positions and recently closed deals, sends them to Qyvex Edge, and never places, modifies, or closes trades.

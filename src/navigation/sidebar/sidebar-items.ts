@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, FilePlus2, type LucideIcon, Settings } from "lucide-react";
+import { BarChart3, BookOpen, Database, FilePlus2, type LucideIcon, Settings } from "lucide-react";
 
 export interface NavSubItem {
   title: string;
@@ -50,6 +50,17 @@ export const sidebarItems: NavGroup[] = [
         title: "Settings",
         url: "/dashboard/settings",
         icon: Settings,
+        subItems: [
+          {
+            title: "Trading Rules",
+            url: "/dashboard/settings",
+          },
+          {
+            title: "MT5 Sync",
+            url: "/dashboard/settings/mt5",
+            icon: Database,
+          },
+        ],
       },
     ],
   },
