@@ -513,12 +513,14 @@ bool SendPayload(string payload, int tradesSent)
    int created = ExtractJsonInt(response, "created", 0);
    int updated = ExtractJsonInt(response, "updated", 0);
    int skipped = ExtractJsonInt(response, "skipped", 0);
+   int received = ExtractJsonInt(response, "received", -1);
    int saved = created + updated;
 
    if(tradesSent > 0 && saved <= 0)
    {
       g_lastStatus = "Failed. Server saved 0/" + IntegerToString(tradesSent) +
-         " trades. Skipped: " + IntegerToString(skipped);
+         " trades. Received: " + IntegerToString(received) +
+         ", skipped: " + IntegerToString(skipped);
       g_lastTradesSent = tradesSent;
       return false;
    }

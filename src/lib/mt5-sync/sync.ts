@@ -15,6 +15,7 @@ export type Mt5SyncPayload = {
 
 export type Mt5SyncResult = {
   success: true;
+  received: number;
   created: number;
   updated: number;
   skipped: number;
@@ -383,6 +384,7 @@ export async function syncMt5Trades(
 
   return {
     success: true,
+    received: payload.trades.length,
     created,
     updated,
     skipped,
