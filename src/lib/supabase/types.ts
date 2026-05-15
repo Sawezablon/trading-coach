@@ -3,6 +3,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type TradeStatus = "open" | "closed";
 export type TradeResult = "pending" | "win" | "loss" | "breakeven";
 export type TradeDirection = "long" | "short";
+export type TradeReviewStatus = "needs_review" | "reviewed";
 
 export type Trade = {
   id: string;
@@ -26,6 +27,11 @@ export type Trade = {
   profit_loss_amount: number | null;
   final_rr: number | null;
   closing_notes: string | null;
+  review_status: TradeReviewStatus;
+  review_completed_at: string | null;
+  lot_size: number | null;
+  commission: number | null;
+  swap: number | null;
   screenshot_url: string | null;
   checklist_results: ChecklistItemResult[];
   passed_rules: string[];

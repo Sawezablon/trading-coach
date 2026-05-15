@@ -26,6 +26,7 @@ export type Mt5SyncError = {
 };
 
 type TradeMutation = Database["public"]["Tables"]["trades"]["Insert"];
+type TradeUpdate = Database["public"]["Tables"]["trades"]["Update"];
 type AppSupabaseClient = SupabaseClient<Database>;
 
 export function hashMt5ApiKey(apiKey: string) {
@@ -44,6 +45,11 @@ function optionalString(value: unknown) {
 function numberValue(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function positiveNumberValue(value: unknown) {
+  const parsed = numberValue(value);
+  return parsed && parsed > 0 ? parsed : null;
 }
 
 function parseMt5Date(value: unknown) {
@@ -138,25 +144,30 @@ function mapMt5Trade({
     user_id: userId,
     pair,
     direction,
-    entry_price: numberValue(rawTrade.entryPrice),
-    stop_loss: numberValue(rawTrade.stopLoss),
-    take_profit: numberValue(rawTrade.takeProfit),
+    entry_price: positiveNumberValue(rawTrade.entryPrice),
+    stop_loss: positiveNumberValue(rawTrade.stopLoss),
+    take_profit: positiveNumberValue(rawTrade.takeProfit),
+    lot_size: numberValue(rawTrade.lotSize ?? rawTrade.volume),
     risk_percent: 0,
     rr: 0,
     session: "MT5",
-    emotions: "Imported from MT5",
-    notes: optionalString(rawTrade.comment) ?? "Synced from MetaTrader 5.",
+    emotions: "unreviewed",
+    notes: optionalString(rawTrade.comment) ?? "Synced from MetaTrader 5. Complete the journal review.",
     confirmation: false,
     status,
     outcome: resolveOutcome(status, profit),
     trade_taken_at: tradeTakenAt,
     trade_timezone: "UTC",
     closed_at: status === "closed" ? closedAt : null,
-    close_price: status === "closed" ? numberValue(rawTrade.closePrice) : null,
+    close_price: status === "closed" ? positiveNumberValue(rawTrade.closePrice) : null,
     profit_loss_percent: null,
     profit_loss_amount: status === "closed" ? profit : null,
+    commission: numberValue(rawTrade.commission),
+    swap: numberValue(rawTrade.swap),
     final_rr: null,
     closing_notes: status === "closed" ? optionalString(rawTrade.closeComment) : null,
+    review_status: "needs_review",
+    review_completed_at: null,
     checklist_results: [],
     passed_rules: [],
     failed_rules: [],
@@ -169,6 +180,46 @@ function mapMt5Trade({
     last_synced_at: syncedAt,
     mt5_raw_data: rawTrade as Json,
   };
+}
+
+function getMt5FactUpdate(
+  tradeInput: TradeMutation,
+  reviewUpdate: Pick<TradeUpdate, "review_status" | "review_completed_at">,
+) {
+  return {
+    pair: tradeInput.pair,
+    direction: tradeInput.direction,
+    entry_price: tradeInput.entry_price,
+    stop_loss: tradeInput.stop_loss,
+    take_profit: tradeInput.take_profit,
+    lot_size: tradeInput.lot_size,
+    status: tradeInput.status,
+    outcome: tradeInput.outcome,
+    trade_taken_at: tradeInput.trade_taken_at,
+    closed_at: tradeInput.closed_at,
+    close_price: tradeInput.close_price,
+    profit_loss_amount: tradeInput.profit_loss_amount,
+    commission: tradeInput.commission,
+    swap: tradeInput.swap,
+    mt5_account: tradeInput.mt5_account,
+    mt5_broker: tradeInput.mt5_broker,
+    synced_from_mt5: true,
+    last_synced_at: tradeInput.last_synced_at,
+    mt5_raw_data: tradeInput.mt5_raw_data,
+    ...reviewUpdate,
+  } satisfies TradeUpdate;
+}
+
+function mt5CloseFactsChanged(
+  existingTrade: Pick<TradeUpdate, "status" | "closed_at" | "close_price" | "profit_loss_amount">,
+  tradeInput: TradeMutation,
+) {
+  return (
+    existingTrade.status !== tradeInput.status ||
+    existingTrade.closed_at !== tradeInput.closed_at ||
+    Number(existingTrade.close_price ?? 0) !== Number(tradeInput.close_price ?? 0) ||
+    Number(existingTrade.profit_loss_amount ?? 0) !== Number(tradeInput.profit_loss_amount ?? 0)
+  );
 }
 
 export async function syncMt5Trades(
@@ -230,7 +281,7 @@ export async function syncMt5Trades(
 
     const { data: existingTrade, error: existingTradeError } = await supabase
       .from("trades")
-      .select("id")
+      .select("id, review_status, status, closed_at, close_price, profit_loss_amount")
       .eq("user_id", connection.user_id)
       .eq("mt5_account", accountNumber)
       .eq("mt5_ticket", tradeInput.mt5_ticket)
@@ -242,7 +293,17 @@ export async function syncMt5Trades(
     }
 
     if (existingTrade) {
-      const { error: updateError } = await supabase.from("trades").update(tradeInput).eq("id", existingTrade.id);
+      const shouldRequestReview = mt5CloseFactsChanged(existingTrade, tradeInput);
+      const reviewUpdate = shouldRequestReview
+        ? { review_status: "needs_review" as const, review_completed_at: null }
+        : {
+            review_status: existingTrade.review_status ?? "needs_review",
+            review_completed_at: undefined,
+          };
+      const { error: updateError } = await supabase
+        .from("trades")
+        .update(getMt5FactUpdate(tradeInput, reviewUpdate))
+        .eq("id", existingTrade.id);
 
       if (updateError) {
         skipped += 1;
@@ -258,7 +319,7 @@ export async function syncMt5Trades(
     if (insertError?.code === "23505") {
       const { error: retryUpdateError } = await supabase
         .from("trades")
-        .update(tradeInput)
+        .update(getMt5FactUpdate(tradeInput, { review_status: "needs_review", review_completed_at: null }))
         .eq("user_id", connection.user_id)
         .eq("mt5_account", accountNumber)
         .eq("mt5_ticket", tradeInput.mt5_ticket);

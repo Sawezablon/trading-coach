@@ -1,15 +1,47 @@
 import Link from "next/link";
 
 import { DeleteTradeButton } from "@/app/(main)/dashboard/trades/_components/delete-trade-button";
-import { TradeOutcomeBadge, TradeStatusBadge } from "@/components/trade-lifecycle-badges";
+import { TradeOutcomeBadge, TradeReviewBadge, TradeStatusBadge } from "@/components/trade-lifecycle-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTrades } from "@/lib/data/trades";
 import { formatTradeDateTime } from "@/lib/format-trade-time";
 
-export default async function JournalPage() {
+const filters = [
+  { label: "All", value: "all" },
+  { label: "Needs Review", value: "needs-review" },
+  { label: "MT5 Synced", value: "mt5" },
+  { label: "Open", value: "open" },
+  { label: "Closed", value: "closed" },
+  { label: "Wins", value: "wins" },
+  { label: "Losses", value: "losses" },
+];
+
+function filterTrades(trades: Awaited<ReturnType<typeof getTrades>>, filter: string) {
+  switch (filter) {
+    case "needs-review":
+      return trades.filter((trade) => trade.review_status === "needs_review");
+    case "mt5":
+      return trades.filter((trade) => trade.synced_from_mt5);
+    case "open":
+      return trades.filter((trade) => trade.status === "open");
+    case "closed":
+      return trades.filter((trade) => trade.status === "closed");
+    case "wins":
+      return trades.filter((trade) => trade.outcome === "win");
+    case "losses":
+      return trades.filter((trade) => trade.outcome === "loss");
+    default:
+      return trades;
+  }
+}
+
+export default async function JournalPage({ searchParams }: { searchParams: Promise<{ filter?: string }> }) {
   const trades = await getTrades();
+  const { filter = "all" } = await searchParams;
+  const currentFilter = filters.find((item) => item.value === filter) ?? filters[0];
+  const visibleTrades = filterTrades(trades, filter);
 
   return (
     <div className="flex flex-col gap-6">
@@ -27,16 +59,34 @@ export default async function JournalPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>All trades</CardTitle>
+        <CardHeader className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>{currentFilter.label}</CardTitle>
+            <Badge variant="outline">{visibleTrades.length} shown</Badge>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {filters.map((item) => (
+              <Button
+                key={item.value}
+                asChild
+                size="sm"
+                variant={filter === item.value ? "default" : "outline"}
+                className="rounded-full"
+              >
+                <Link href={item.value === "all" ? "/dashboard/journal" : `/dashboard/journal?filter=${item.value}`}>
+                  {item.label}
+                </Link>
+              </Button>
+            ))}
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {trades.length ? (
-            trades.map((trade) => {
+          {visibleTrades.length ? (
+            visibleTrades.map((trade) => {
               return (
                 <div
                   key={trade.id}
-                  className="grid gap-4 rounded-2xl border border-border/80 bg-secondary/40 p-4 transition-colors hover:border-primary/30 hover:bg-card xl:grid-cols-[1.2fr_auto_auto_auto_auto]"
+                  className="grid gap-4 rounded-2xl border border-border/80 bg-secondary/40 p-4 transition-colors hover:border-primary/30 hover:bg-card xl:grid-cols-[1.2fr_auto_auto_auto_auto_auto]"
                 >
                   <div>
                     <div className="font-medium">
@@ -52,10 +102,13 @@ export default async function JournalPage() {
                   </div>
                   <TradeStatusBadge status={trade.status} />
                   <TradeOutcomeBadge outcome={trade.outcome} />
+                  <TradeReviewBadge status={trade.review_status} />
                   <Badge variant="outline">{trade.discipline_score ?? 0}% discipline</Badge>
                   <div className="flex flex-wrap gap-2">
                     <Button asChild variant="outline" size="sm">
-                      <Link href={`/dashboard/trades/${trade.id}`}>Open</Link>
+                      <Link href={`/dashboard/trades/${trade.id}`}>
+                        {trade.review_status === "needs_review" ? "Review" : "Open"}
+                      </Link>
                     </Button>
                     <Button asChild variant="outline" size="sm">
                       <Link href={`/dashboard/trades/${trade.id}/edit`}>Edit</Link>
@@ -67,9 +120,13 @@ export default async function JournalPage() {
             })
           ) : (
             <div className="rounded-2xl border border-dashed p-8 text-center">
-              <div className="font-medium">No trades logged yet</div>
+              <div className="font-medium">
+                {trades.length ? "No trades match this filter" : "No trades logged yet"}
+              </div>
               <p className="mt-2 text-muted-foreground text-sm">
-                Your journal will appear here after your first entry.
+                {trades.length
+                  ? "Try a different journal view or complete more trade reviews."
+                  : "Your journal will appear here after your first entry."}
               </p>
             </div>
           )}

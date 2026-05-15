@@ -187,6 +187,17 @@ export function TradeUploadForm({ rules, tradeTimestamps, initialTrade }: TradeF
   return (
     <form onSubmit={onSubmit} className="grid gap-4 xl:grid-cols-12">
       <div className="space-y-4 xl:col-span-7">
+        {initialTrade?.review_status === "needs_review" ? (
+          <Card className="border-[#F59E0B]/25 bg-[#F59E0B]/10">
+            <CardContent className="p-4">
+              <div className="font-medium">Complete this MT5 review</div>
+              <p className="mt-1 text-muted-foreground text-sm">
+                Qyvex filled the broker facts. Add the missing trading context, emotions, screenshot, and checklist.
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
+
         <Card>
           <CardHeader>
             <CardTitle>Trade context</CardTitle>

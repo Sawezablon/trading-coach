@@ -16,7 +16,7 @@ function getSyncDomain(syncUrl: string) {
   try {
     return new URL(syncUrl).origin;
   } catch {
-    return "https://trading-coach-six.vercel.app";
+    return "https://qyvexedge.com";
   }
 }
 

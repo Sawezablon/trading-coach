@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { DisciplineChart } from "@/app/(main)/dashboard/_components/discipline-chart";
-import { TradeOutcomeBadge, TradeStatusBadge } from "@/components/trade-lifecycle-badges";
+import { TradeOutcomeBadge, TradeReviewBadge, TradeStatusBadge } from "@/components/trade-lifecycle-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +43,7 @@ export default async function Page() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard title="Total trades" value={metrics.totalTrades} signal="TR" compact />
+        <MetricCard title="Needs review" value={metrics.needsReviewTrades} signal="NR" compact />
         <MetricCard title="Open" value={metrics.openTrades} signal="OP" compact />
         <MetricCard title="Closed" value={metrics.closedTrades} signal="CL" compact />
         <MetricCard title="Avg final RR" value={`${metrics.averageFinalRr}R`} signal="RR" compact />
@@ -50,6 +51,9 @@ export default async function Page() {
         <MetricCard title="Losses" value={metrics.losses} signal="L" compact />
         <MetricCard title="Breakevens" value={metrics.breakevens} signal="BE" compact />
         <MetricCard title="Violation rate" value={`${metrics.ruleViolationRate}%`} signal="RV" compact />
+        <MetricCard title="MT5 synced" value={metrics.mt5SyncedTrades} signal="M5" compact />
+        <MetricCard title="No SL" value={metrics.tradesWithoutStopLoss} signal="SL" compact />
+        <MetricCard title="No TP" value={metrics.tradesWithoutTakeProfit} signal="TP" compact />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-12">
@@ -94,7 +98,7 @@ export default async function Page() {
               <Link
                 key={trade.id}
                 href={`/dashboard/trades/${trade.id}`}
-                className="grid gap-3 rounded-2xl border border-border/80 bg-secondary/40 p-4 transition-colors hover:border-primary/30 hover:bg-card md:grid-cols-[1fr_auto_auto_auto]"
+                className="grid gap-3 rounded-2xl border border-border/80 bg-secondary/40 p-4 transition-colors hover:border-primary/30 hover:bg-card md:grid-cols-[1fr_auto_auto_auto_auto]"
               >
                 <div>
                   <div className="font-medium">{trade.pair}</div>
@@ -105,6 +109,7 @@ export default async function Page() {
                 </div>
                 <TradeStatusBadge status={trade.status} />
                 <TradeOutcomeBadge outcome={trade.outcome} />
+                <TradeReviewBadge status={trade.review_status} />
                 <Badge variant="outline">{analysis?.discipline_score ?? 0}% discipline</Badge>
               </Link>
             );

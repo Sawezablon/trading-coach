@@ -21,6 +21,10 @@ export type DashboardMetrics = {
   avgChecklistCompletion: number;
   failedRuleTrades: number;
   mostFailedChecklistItem: string;
+  needsReviewTrades: number;
+  mt5SyncedTrades: number;
+  tradesWithoutStopLoss: number;
+  tradesWithoutTakeProfit: number;
 };
 
 export async function getSessionUser() {
@@ -113,6 +117,14 @@ export function getPrimaryAnalysis(trade: TradeWithAnalysis): AiAnalysis | null 
 export function calculateDashboardMetrics(trades: TradeWithAnalysis[]): DashboardMetrics {
   const openTrades = trades.filter((trade) => trade.status === "open");
   const closedTrades = trades.filter((trade) => trade.status === "closed");
+  const needsReviewTrades = trades.filter((trade) => trade.review_status === "needs_review").length;
+  const mt5SyncedTrades = trades.filter((trade) => trade.synced_from_mt5).length;
+  const tradesWithoutStopLoss = trades.filter(
+    (trade) => trade.synced_from_mt5 && Number(trade.stop_loss ?? 0) <= 0,
+  ).length;
+  const tradesWithoutTakeProfit = trades.filter(
+    (trade) => trade.synced_from_mt5 && Number(trade.take_profit ?? 0) <= 0,
+  ).length;
   const wins = closedTrades.filter((trade) => trade.outcome === "win").length;
   const losses = closedTrades.filter((trade) => trade.outcome === "loss").length;
   const breakevens = closedTrades.filter((trade) => trade.outcome === "breakeven").length;
@@ -169,5 +181,9 @@ export function calculateDashboardMetrics(trades: TradeWithAnalysis[]): Dashboar
     avgChecklistCompletion,
     failedRuleTrades,
     mostFailedChecklistItem,
+    needsReviewTrades,
+    mt5SyncedTrades,
+    tradesWithoutStopLoss,
+    tradesWithoutTakeProfit,
   };
 }

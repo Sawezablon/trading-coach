@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { DeleteTradeButton } from "@/app/(main)/dashboard/trades/_components/delete-trade-button";
-import { TradeOutcomeBadge, TradeStatusBadge } from "@/components/trade-lifecycle-badges";
+import { TradeOutcomeBadge, TradeReviewBadge, TradeStatusBadge } from "@/components/trade-lifecycle-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +34,8 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
             <div className="flex flex-wrap gap-2">
               <TradeStatusBadge status={trade.status} />
               <TradeOutcomeBadge outcome={trade.outcome} />
+              <TradeReviewBadge status={trade.review_status} />
+              {trade.synced_from_mt5 ? <Badge variant="outline">MT5 synced</Badge> : null}
             </div>
             <p className="text-muted-foreground text-sm">
               {tradeDateTime} - {tradeTimezone}
@@ -41,11 +43,29 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline">
-              <Link href={`/dashboard/trades/${trade.id}/edit`}>Edit</Link>
+              <Link href={`/dashboard/trades/${trade.id}/edit`}>
+                {trade.review_status === "needs_review" ? "Complete Review" : "Edit"}
+              </Link>
             </Button>
             <DeleteTradeButton tradeId={trade.id} />
           </div>
         </div>
+
+        {trade.review_status === "needs_review" ? (
+          <Card className="border-[#F59E0B]/25 bg-[#F59E0B]/10">
+            <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="font-medium">This MT5 trade needs your review</div>
+                <p className="mt-1 text-muted-foreground text-sm">
+                  Broker facts are already filled. Add emotions, notes, screenshot, and checklist confirmations.
+                </p>
+              </div>
+              <Button asChild>
+                <Link href={`/dashboard/trades/${trade.id}/edit`}>Complete Review</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card>
           <CardHeader>
@@ -58,6 +78,7 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
             <Info label="Entry price" value={trade.entry_price} />
             <Info label="Stop loss" value={trade.stop_loss} />
             <Info label="Take profit" value={trade.take_profit} />
+            <Info label="Lot size" value={trade.lot_size} />
             <Info label="Risk" value={`${trade.risk_percent}%`} />
             <Info label="Planned RR" value={`${trade.rr}R`} />
             <Info label="Session" value={trade.session} />
@@ -87,6 +108,8 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
                 value={trade.profit_loss_percent === null ? null : `${trade.profit_loss_percent}%`}
               />
               <Info label="Profit/loss amount" value={trade.profit_loss_amount} />
+              <Info label="Commission" value={trade.commission} />
+              <Info label="Swap" value={trade.swap} />
               <Info label="Final RR" value={trade.final_rr === null ? null : `${trade.final_rr}R`} />
               <div className="space-y-1 md:col-span-2">
                 <div className="text-muted-foreground text-sm">Closing notes</div>

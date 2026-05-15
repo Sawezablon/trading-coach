@@ -60,6 +60,11 @@ create table if not exists public.trades (
   profit_loss_amount numeric,
   final_rr numeric,
   closing_notes text,
+  review_status text not null default 'reviewed' check (review_status in ('needs_review', 'reviewed')),
+  review_completed_at timestamptz,
+  lot_size numeric,
+  commission numeric,
+  swap numeric,
   screenshot_url text,
   checklist_results jsonb not null default '[]',
   passed_rules text[] not null default '{}',
@@ -131,6 +136,7 @@ create index if not exists trading_rules_user_id_idx on public.trading_rules(use
 create index if not exists trades_user_created_idx on public.trades(user_id, created_at desc);
 create index if not exists trades_user_trade_taken_idx on public.trades(user_id, trade_taken_at desc);
 create index if not exists trades_user_status_idx on public.trades(user_id, status);
+create index if not exists trades_user_review_status_idx on public.trades(user_id, review_status);
 create index if not exists trades_user_pair_idx on public.trades(user_id, pair);
 create index if not exists trades_user_outcome_idx on public.trades(user_id, outcome);
 create index if not exists trades_user_mt5_ticket_idx on public.trades(user_id, mt5_ticket) where mt5_ticket is not null;

@@ -163,6 +163,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...parsed.data,
       screenshot_url: screenshotUrl,
       ...checklistUpdate,
+      review_status: "reviewed",
+      review_completed_at: new Date().toISOString(),
     })
     .eq("id", id)
     .eq("user_id", user.id)

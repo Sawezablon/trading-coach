@@ -158,6 +158,12 @@ npm run dev
 
 The app will run in demo mode without Supabase variables, but real auth and persistence require Supabase.
 
+For Vercel production, set:
+
+```bash
+NEXT_PUBLIC_APP_URL=https://qyvexedge.com
+```
+
 ## AI Setup
 
 Add `OPENAI_API_KEY` to enable OpenAI analysis. Without it, Qyvex Edge returns deterministic mock coaching feedback so the product flow remains usable during local development.
@@ -224,7 +230,7 @@ To install it:
 
 ```text
 QyvexApiKey = your generated API key
-SyncUrl = https://trading-coach-six.vercel.app/api/mt5/sync
+SyncUrl = https://qyvexedge.com/api/mt5/sync
 SyncIntervalMinutes = 5
 InitialHistoryLookbackDays = 365
 SyncOverlapMinutes = 10
@@ -237,7 +243,7 @@ Before the EA can send data, enable WebRequest in MetaTrader:
 3. Add your Qyvex domain URL, for example:
 
 ```text
-https://trading-coach-six.vercel.app
+https://qyvexedge.com
 ```
 
 The EA is read-only. On first run, it sends closed trade history from `InitialHistoryLookbackDays`. After a successful sync, it stores the last successful sync time locally in MT5, then future syncs send open positions plus closed deals since the last successful sync minus `SyncOverlapMinutes`. If MT5 is closed for days, the next launch catches up from the last successful sync. Qyvex Edge handles duplicate MT5 tickets by updating the existing journal row.

@@ -66,6 +66,8 @@ export async function POST(request: Request) {
         failed_rules: checklist.failedRules,
         checklist_completion_rate: checklist.completionRate,
         discipline_score: checklist.disciplineScore,
+        review_status: "reviewed",
+        review_completed_at: now,
         created_at: now,
         updated_at: now,
       },
@@ -166,6 +168,8 @@ export async function POST(request: Request) {
       failed_rules: checklist.failedRules,
       checklist_completion_rate: checklist.completionRate,
       discipline_score: checklist.disciplineScore,
+      review_status: "reviewed",
+      review_completed_at: now,
     })
     .select()
     .single();
