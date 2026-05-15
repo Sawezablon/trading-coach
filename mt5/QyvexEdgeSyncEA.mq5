@@ -4,14 +4,14 @@
 //| This EA does not place, modify, or close trades.                  |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "1.00"
+#property version   "1.01"
 #property description "Read-only Qyvex Edge trade sync EA."
 
 input string QyvexApiKey = "";
 input string SyncUrl = "https://trading-coach-six.vercel.app/api/mt5/sync";
 input int SyncIntervalMinutes = 5;
+input int ClosedDealsLookbackDays = 30;
 
-datetime g_lastClosedDealScan = 0;
 datetime g_lastSyncTime = 0;
 string g_lastStatus = "Waiting for first sync";
 int g_lastTradesSent = 0;
@@ -203,7 +203,7 @@ int CollectClosedDeals(string &items)
 {
    int count = 0;
    datetime now = TimeCurrent();
-   datetime historyFrom = now - (30 * 24 * 60 * 60);
+   datetime historyFrom = now - (MathMax(1, ClosedDealsLookbackDays) * 24 * 60 * 60);
 
    if(!HistorySelect(historyFrom, now))
       return 0;
@@ -228,9 +228,6 @@ int CollectClosedDeals(string &items)
          continue;
 
       datetime closeTime = (datetime)HistoryDealGetInteger(dealTicket, DEAL_TIME);
-
-      if(closeTime < g_lastClosedDealScan)
-         continue;
 
       ulong positionId = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
       datetime openTime = 0;
@@ -288,6 +285,7 @@ void UpdateChartStatus()
       "Last sync: ", lastSync, "\n",
       "Status: ", g_lastStatus, "\n",
       "Trades sent: ", IntegerToString(g_lastTradesSent), "\n",
+      "Closed deal lookback: ", IntegerToString(MathMax(1, ClosedDealsLookbackDays)), " days\n",
       "Sync URL: ", SyncUrl
    );
 }
@@ -343,10 +341,7 @@ void SyncNow()
    tradesSent += CollectClosedDeals(tradesJson);
 
    string payload = BuildSyncPayload(tradesJson);
-   bool success = SendPayload(payload, tradesSent);
-
-   if(success)
-      g_lastClosedDealScan = TimeCurrent() - 60;
+   SendPayload(payload, tradesSent);
 
    UpdateChartStatus();
 }
@@ -354,7 +349,6 @@ void SyncNow()
 int OnInit()
 {
    int intervalSeconds = MathMax(1, SyncIntervalMinutes) * 60;
-   g_lastClosedDealScan = TimeCurrent() - (24 * 60 * 60);
 
    EventSetTimer(intervalSeconds);
    g_lastStatus = "Initialized";

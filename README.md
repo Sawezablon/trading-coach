@@ -222,6 +222,7 @@ To install it:
 QyvexApiKey = your generated API key
 SyncUrl = https://trading-coach-six.vercel.app/api/mt5/sync
 SyncIntervalMinutes = 5
+ClosedDealsLookbackDays = 30
 ```
 
 Before the EA can send data, enable WebRequest in MetaTrader:
@@ -234,4 +235,4 @@ Before the EA can send data, enable WebRequest in MetaTrader:
 https://trading-coach-six.vercel.app
 ```
 
-The EA is read-only. It collects open positions and recently closed deals, sends them to Qyvex Edge, and never places, modifies, or closes trades.
+The EA is read-only. It collects open positions and closed deals from the recent lookback window, sends them to Qyvex Edge, and never places, modifies, or closes trades. Qyvex Edge handles duplicate MT5 tickets by updating the existing journal row, so deleted synced rows can be recreated on the next sync.
