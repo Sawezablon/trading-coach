@@ -259,7 +259,10 @@ export async function syncMt5Trades(
   let created = 0;
   let updated = 0;
   let skipped = 0;
+  let processed = 0;
+  let attemptedWrites = 0;
   let firstSkipReason: string | null = null;
+  let lastTicket: string | null = null;
   const syncedAt = new Date().toISOString();
 
   function skip(reason: string) {
@@ -268,6 +271,8 @@ export async function syncMt5Trades(
   }
 
   for (const item of payload.trades) {
+    processed += 1;
+
     if (!item || typeof item !== "object" || Array.isArray(item)) {
       skip("Trade payload item is not an object.");
       continue;
@@ -285,6 +290,8 @@ export async function syncMt5Trades(
       skip("Trade payload is missing ticket, symbol, direction, or open time.");
       continue;
     }
+
+    lastTicket = tradeInput.mt5_ticket;
 
     const { data: existingTrade, error: existingTradeError } = await supabase
       .from("trades")
@@ -311,6 +318,7 @@ export async function syncMt5Trades(
         .from("trades")
         .update(getMt5FactUpdate(tradeInput, reviewUpdate))
         .eq("id", existingTrade.id);
+      attemptedWrites += 1;
 
       if (updateError) {
         skip(updateError.message);
@@ -322,6 +330,7 @@ export async function syncMt5Trades(
     }
 
     const { error: insertError } = await supabase.from("trades").insert(tradeInput);
+    attemptedWrites += 1;
 
     if (insertError?.code === "23505") {
       const { error: retryUpdateError } = await supabase
@@ -346,7 +355,10 @@ export async function syncMt5Trades(
   if (payload.trades.length > 0 && created + updated === 0) {
     return {
       error: `MT5 sync received ${payload.trades.length} trade(s), but none were saved. First error: ${
-        firstSkipReason ?? `No insert/update was performed. Skipped: ${skipped}.`
+        firstSkipReason ??
+        `No insert/update completed. Processed: ${processed}. Attempted writes: ${attemptedWrites}. Last ticket: ${
+          lastTicket ?? "none"
+        }. Skipped: ${skipped}.`
       }`,
       status: 400,
     };
