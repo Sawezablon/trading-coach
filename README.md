@@ -220,7 +220,7 @@ To install it:
 
 ```text
 QyvexApiKey = your generated API key
-SyncUrl = https://YOUR_QYVEX_DOMAIN/api/mt5/sync
+SyncUrl = https://trading-coach-six.vercel.app/api/mt5/sync
 SyncIntervalMinutes = 5
 ```
 
@@ -231,7 +231,7 @@ Before the EA can send data, enable WebRequest in MetaTrader:
 3. Add your Qyvex domain URL, for example:
 
 ```text
-https://YOUR_QYVEX_DOMAIN
+https://trading-coach-six.vercel.app
 ```
 
 The EA is read-only. It collects open positions and recently closed deals, sends them to Qyvex Edge, and never places, modifies, or closes trades.

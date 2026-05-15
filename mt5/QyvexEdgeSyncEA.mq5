@@ -8,7 +8,7 @@
 #property description "Read-only Qyvex Edge trade sync EA."
 
 input string QyvexApiKey = "";
-input string SyncUrl = "https://YOUR_QYVEX_DOMAIN/api/mt5/sync";
+input string SyncUrl = "https://trading-coach-six.vercel.app/api/mt5/sync";
 input int SyncIntervalMinutes = 5;
 
 datetime g_lastClosedDealScan = 0;
