@@ -26,7 +26,9 @@ const setupSteps = [
   "Go to File -> Open Data Folder",
   "Open MQL5 -> Experts",
   "Paste the EA file there",
+  "Open MetaEditor and compile the EA",
   "Restart MT5",
+  "In Navigator, right-click Expert Advisors and refresh",
   "Go to Tools -> Options -> Expert Advisors",
   "Enable Allow WebRequest for listed URL",
   "Add the Qyvex sync URL domain",
@@ -48,7 +50,7 @@ export default async function Mt5SyncSettingsPage() {
           <div className="text-muted-foreground text-sm">Settings</div>
           <h1 className="font-semibold text-4xl tracking-tight">MT5 Sync</h1>
           <p className="max-w-2xl text-muted-foreground text-sm">
-            Prepare {APP_CONFIG.name} for future MetaTrader 5 imports. The EA and live sync worker are not included yet.
+            Connect the read-only MetaTrader 5 Expert Advisor to import your trade history into {APP_CONFIG.name}.
           </p>
         </div>
         <Button asChild variant="outline">
@@ -81,7 +83,9 @@ export default async function Mt5SyncSettingsPage() {
             </CardDescription>
           </div>
           <Button asChild>
-            <a href="/api/mt5/ea">Download EA</a>
+            <a href="/downloads/QyvexEdgeSyncEA.mq5" download>
+              Download EA
+            </a>
           </Button>
         </CardHeader>
         <CardContent className="space-y-5">

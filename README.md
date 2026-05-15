@@ -209,15 +209,18 @@ The read-only Expert Advisor is available at:
 
 ```text
 mt5/QyvexEdgeSyncEA.mq5
+public/downloads/QyvexEdgeSyncEA.mq5
 ```
 
 To install it:
 
 1. In MetaTrader 5, open **File > Open Data Folder**.
 2. Copy `QyvexEdgeSyncEA.mq5` into `MQL5/Experts`.
-3. Open MetaEditor, compile the EA, then attach it to any chart.
-4. In Qyvex Edge, open **Settings > MT5 Sync**, generate an API key, and copy the Sync URL.
-5. In the EA inputs, set:
+3. Open MetaEditor and compile the EA.
+4. In MT5 Navigator, right-click **Expert Advisors** and select **Refresh**.
+5. Attach **QyvexEdgeSyncEA** to any chart.
+6. In Qyvex Edge, open **Settings > MT5 Sync**, generate an API key, and copy the Sync URL.
+7. In the EA inputs, set:
 
 ```text
 QyvexApiKey = your generated API key
