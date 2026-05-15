@@ -11,15 +11,11 @@ import { Mt5SyncPanel } from "./_components/mt5-sync-panel";
 
 export const dynamic = "force-dynamic";
 
-function getAppUrl() {
-  return env.appUrl;
-}
-
 function getSyncDomain(syncUrl: string) {
   try {
     return new URL(syncUrl).origin;
   } catch {
-    return "https://qyvexedge.com";
+    return "https://sync.qyvexedge.com";
   }
 }
 
@@ -45,7 +41,7 @@ export default async function Mt5SyncSettingsPage() {
 
   const connection = await getMt5Connection();
   const pendingRequest = await getPendingMt5SyncRequest();
-  const syncUrl = `${getAppUrl().replace(/\/$/, "")}/api/mt5/sync`;
+  const syncUrl = env.mt5SyncUrl;
   const syncDomain = getSyncDomain(syncUrl);
 
   return (
