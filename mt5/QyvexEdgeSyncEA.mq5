@@ -160,6 +160,23 @@ int ExtractJsonInt(string json, string key, int fallback)
    return (int)StringToInteger(number);
 }
 
+bool JsonHasKey(string json, string key)
+{
+   return StringFind(json, "\"" + key + "\":") >= 0;
+}
+
+string CompactResponse(string response)
+{
+   string compact = response;
+   StringReplace(compact, "\r", " ");
+   StringReplace(compact, "\n", " ");
+
+   if(StringLen(compact) > 120)
+      return StringSubstr(compact, 0, 120) + "...";
+
+   return compact;
+}
+
 string DirectionFromDealType(long dealType)
 {
    if(dealType == DEAL_TYPE_BUY)
@@ -485,8 +502,34 @@ bool SendPayload(string payload, int tradesSent)
       return false;
    }
 
+   if(JsonHasKey(response, "error"))
+   {
+      string serverError = ExtractJsonString(response, "error");
+      g_lastStatus = "Failed. Server: " + (serverError == "" ? CompactResponse(response) : serverError);
+      g_lastTradesSent = tradesSent;
+      return false;
+   }
+
+   int created = ExtractJsonInt(response, "created", 0);
+   int updated = ExtractJsonInt(response, "updated", 0);
+   int skipped = ExtractJsonInt(response, "skipped", 0);
+   int saved = created + updated;
+
+   if(tradesSent > 0 && saved <= 0)
+   {
+      g_lastStatus = "Failed. Server saved 0/" + IntegerToString(tradesSent) +
+         " trades. Skipped: " + IntegerToString(skipped);
+      g_lastTradesSent = tradesSent;
+      return false;
+   }
+
    g_lastSyncTime = TimeCurrent();
-   g_lastStatus = "Success";
+   if(tradesSent > 0)
+      g_lastStatus = "Success. Created " + IntegerToString(created) +
+         ", updated " + IntegerToString(updated) +
+         ", skipped " + IntegerToString(skipped);
+   else
+      g_lastStatus = "Success. No trades to send";
    g_lastTradesSent = tradesSent;
    MarkSyncSuccess(g_lastSyncTime);
    return true;
