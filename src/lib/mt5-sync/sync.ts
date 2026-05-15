@@ -258,11 +258,17 @@ export async function syncMt5Trades(
   let created = 0;
   let updated = 0;
   let skipped = 0;
+  let firstSkipReason: string | null = null;
   const syncedAt = new Date().toISOString();
+
+  function skip(reason: string) {
+    skipped += 1;
+    firstSkipReason ??= reason;
+  }
 
   for (const item of payload.trades) {
     if (!item || typeof item !== "object" || Array.isArray(item)) {
-      skipped += 1;
+      skip("Trade payload item is not an object.");
       continue;
     }
 
@@ -275,7 +281,7 @@ export async function syncMt5Trades(
     });
 
     if (!tradeInput?.mt5_ticket) {
-      skipped += 1;
+      skip("Trade payload is missing ticket, symbol, direction, or open time.");
       continue;
     }
 
@@ -288,7 +294,7 @@ export async function syncMt5Trades(
       .maybeSingle();
 
     if (existingTradeError) {
-      skipped += 1;
+      skip(existingTradeError.message);
       continue;
     }
 
@@ -306,7 +312,7 @@ export async function syncMt5Trades(
         .eq("id", existingTrade.id);
 
       if (updateError) {
-        skipped += 1;
+        skip(updateError.message);
       } else {
         updated += 1;
       }
@@ -325,15 +331,24 @@ export async function syncMt5Trades(
         .eq("mt5_ticket", tradeInput.mt5_ticket);
 
       if (retryUpdateError) {
-        skipped += 1;
+        skip(retryUpdateError.message);
       } else {
         updated += 1;
       }
     } else if (insertError) {
-      skipped += 1;
+      skip(insertError.message);
     } else {
       created += 1;
     }
+  }
+
+  if (payload.trades.length > 0 && created + updated === 0 && skipped > 0) {
+    return {
+      error: `MT5 sync received ${payload.trades.length} trade(s), but none were saved. First error: ${
+        firstSkipReason ?? "Unknown save error."
+      }`,
+      status: 400,
+    };
   }
 
   const { error: syncUpdateError } = await supabase
