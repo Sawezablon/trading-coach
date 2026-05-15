@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from "next/cache";
 import Link from "next/link";
 
 import { DisciplineChart } from "@/app/(main)/dashboard/_components/discipline-chart";
@@ -9,7 +10,11 @@ import { Progress } from "@/components/ui/progress";
 import { calculateDashboardMetrics, getPrimaryAnalysis, getTrades } from "@/lib/data/trades";
 import { formatTradeDateTime } from "@/lib/format-trade-time";
 
+export const dynamic = "force-dynamic";
+
 export default async function Page() {
+  noStore();
+
   const trades = await getTrades();
   const metrics = calculateDashboardMetrics(trades);
   const chartData = trades

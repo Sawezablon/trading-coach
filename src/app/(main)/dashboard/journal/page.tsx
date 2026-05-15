@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from "next/cache";
 import Link from "next/link";
 
 import { DeleteTradeButton } from "@/app/(main)/dashboard/trades/_components/delete-trade-button";
@@ -17,6 +18,8 @@ const filters = [
   { label: "Wins", value: "wins" },
   { label: "Losses", value: "losses" },
 ];
+
+export const dynamic = "force-dynamic";
 
 function filterTrades(trades: Awaited<ReturnType<typeof getTrades>>, filter: string) {
   switch (filter) {
@@ -38,6 +41,8 @@ function filterTrades(trades: Awaited<ReturnType<typeof getTrades>>, filter: str
 }
 
 export default async function JournalPage({ searchParams }: { searchParams: Promise<{ filter?: string }> }) {
+  noStore();
+
   const trades = await getTrades();
   const { filter = "all" } = await searchParams;
   const currentFilter = filters.find((item) => item.value === filter) ?? filters[0];

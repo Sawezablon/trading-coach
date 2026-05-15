@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from "next/cache";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,8 @@ import { getMt5Connection, getPendingMt5SyncRequest } from "@/lib/data/mt5";
 import { env } from "@/lib/env";
 
 import { Mt5SyncPanel } from "./_components/mt5-sync-panel";
+
+export const dynamic = "force-dynamic";
 
 function getAppUrl() {
   return env.appUrl;
@@ -38,6 +41,8 @@ const setupSteps = [
 ];
 
 export default async function Mt5SyncSettingsPage() {
+  noStore();
+
   const connection = await getMt5Connection();
   const pendingRequest = await getPendingMt5SyncRequest();
   const syncUrl = `${getAppUrl().replace(/\/$/, "")}/api/mt5/sync`;
