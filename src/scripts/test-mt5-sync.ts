@@ -57,6 +57,7 @@ function readEnv(): Env {
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
     testUserEmail: process.env.MT5_TEST_USER_EMAIL ?? process.env.TEST_USER_EMAIL ?? "",
+    useHttp: process.env.MT5_TEST_HTTP ?? "",
   };
 }
 
@@ -169,6 +170,13 @@ function getSyncPayload({ closeOpenTrade = false }: { closeOpenTrade?: boolean }
   };
 }
 
+function getSyncPayloadWithRequest(syncRequestId: string) {
+  return {
+    ...getSyncPayload({ closeOpenTrade: true }),
+    syncRequestId,
+  };
+}
+
 async function postSync(appUrl: string, payload = getSyncPayload()) {
   const response = await fetch(`${appUrl.replace(/\/$/, "")}/api/mt5/sync`, {
     method: "POST",
@@ -188,21 +196,25 @@ async function runSync(
   supabase: ReturnType<typeof createClient<Database>>,
   appUrl: string,
   payload = getSyncPayload(),
+  useHttp = false,
 ) {
-  try {
-    return await postSync(appUrl, payload);
-  } catch (error) {
-    console.warn(
-      `HTTP sync was unavailable (${error instanceof Error ? error.message : "unknown error"}). Falling back to the shared sync handler.`,
-    );
-    const result = await syncMt5Trades(supabase, payload);
-
-    if ("error" in result) {
-      throw new Error(`Direct MT5 sync failed with ${result.status}: ${result.error}`);
+  if (useHttp) {
+    try {
+      return await postSync(appUrl, payload);
+    } catch (error) {
+      console.warn(
+        `HTTP sync was unavailable (${error instanceof Error ? error.message : "unknown error"}). Falling back to the shared sync handler.`,
+      );
     }
-
-    return result;
   }
+
+  const result = await syncMt5Trades(supabase, payload);
+
+  if ("error" in result) {
+    throw new Error(`Direct MT5 sync failed with ${result.status}: ${result.error}`);
+  }
+
+  return result;
 }
 
 async function main() {
@@ -217,6 +229,7 @@ async function main() {
       autoRefreshToken: false,
     },
   });
+  const useHttp = env.useHttp === "1" || env.useHttp.toLowerCase() === "true";
   const user = await getTestUserId(supabase, env.testUserEmail);
 
   await supabase.from("profiles").upsert({
@@ -235,6 +248,7 @@ async function main() {
     .update({ is_active: false })
     .eq("api_key_hash", hashMt5ApiKey(TEST_API_KEY))
     .neq("user_id", user.id);
+  await supabase.from("mt5_sync_requests").delete().eq("user_id", user.id).eq("status", "pending");
 
   const { error: connectionError } = await supabase.from("mt5_connections").upsert(
     {
@@ -251,17 +265,17 @@ async function main() {
     throw connectionError;
   }
 
-  const firstSync = await runSync(supabase, env.appUrl);
+  const firstSync = await runSync(supabase, env.appUrl, getSyncPayload(), useHttp);
   assert(firstSync.created === 3, `Expected first sync to create 3 trades, got ${JSON.stringify(firstSync)}.`);
   assert(firstSync.updated === 0, `Expected first sync to update 0 trades, got ${JSON.stringify(firstSync)}.`);
   assert(firstSync.skipped === 0, `Expected first sync to skip 0 trades, got ${JSON.stringify(firstSync)}.`);
 
-  const secondSync = await runSync(supabase, env.appUrl);
+  const secondSync = await runSync(supabase, env.appUrl, getSyncPayload(), useHttp);
   assert(secondSync.created === 0, `Expected duplicate sync to create 0 trades, got ${JSON.stringify(secondSync)}.`);
   assert(secondSync.updated === 3, `Expected duplicate sync to update 3 trades, got ${JSON.stringify(secondSync)}.`);
   assert(secondSync.skipped === 0, `Expected duplicate sync to skip 0 trades, got ${JSON.stringify(secondSync)}.`);
 
-  const closeOpenTradeSync = await runSync(supabase, env.appUrl, getSyncPayload({ closeOpenTrade: true }));
+  const closeOpenTradeSync = await runSync(supabase, env.appUrl, getSyncPayload({ closeOpenTrade: true }), useHttp);
   assert(
     closeOpenTradeSync.created === 0,
     `Expected open-to-closed sync to create 0 trades, got ${JSON.stringify(closeOpenTradeSync)}.`,
@@ -273,6 +287,53 @@ async function main() {
   assert(
     closeOpenTradeSync.skipped === 0,
     `Expected open-to-closed sync to skip 0 trades, got ${JSON.stringify(closeOpenTradeSync)}.`,
+  );
+
+  const { data: connectionForRequest, error: connectionForRequestError } = await supabase
+    .from("mt5_connections")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (connectionForRequestError) {
+    throw connectionForRequestError;
+  }
+
+  await supabase
+    .from("trades")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("mt5_account", TEST_ACCOUNT)
+    .in("mt5_ticket", TEST_TICKETS);
+
+  const { data: syncRequest, error: syncRequestError } = await supabase
+    .from("mt5_sync_requests")
+    .insert({
+      user_id: user.id,
+      mt5_connection_id: connectionForRequest.id,
+      account_number: TEST_ACCOUNT,
+      lookback_days: 365,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+
+  if (syncRequestError) {
+    throw syncRequestError;
+  }
+
+  const resyncAfterDelete = await runSync(supabase, env.appUrl, getSyncPayloadWithRequest(syncRequest.id), useHttp);
+  assert(
+    resyncAfterDelete.created === 3,
+    `Expected resync after delete to recreate 3 trades, got ${JSON.stringify(resyncAfterDelete)}.`,
+  );
+  assert(
+    resyncAfterDelete.updated === 0,
+    `Expected resync after delete to update 0 trades, got ${JSON.stringify(resyncAfterDelete)}.`,
+  );
+  assert(
+    resyncAfterDelete.skipped === 0,
+    `Expected resync after delete to skip 0 trades, got ${JSON.stringify(resyncAfterDelete)}.`,
   );
 
   const { data: trades, error: tradesError } = await supabase
@@ -319,11 +380,25 @@ async function main() {
 
   assert(connection.last_sync_at, "Connection last_sync_at was not updated.");
 
+  const { data: completedRequest, error: completedRequestError } = await supabase
+    .from("mt5_sync_requests")
+    .select("status, completed_at")
+    .eq("id", syncRequest.id)
+    .single();
+
+  if (completedRequestError) {
+    throw completedRequestError;
+  }
+
+  assert(completedRequest.status === "completed", "Manual resync request was not marked completed.");
+  assert(completedRequest.completed_at, "Manual resync request completed_at was not set.");
+
   console.log("MT5 sync developer test passed.");
   console.table({
     firstSync,
     secondSync,
     closeOpenTradeSync,
+    resyncAfterDelete,
     journal: {
       totalTrades: trades.length,
       openStatus: byTicket.get(TEST_TICKETS[0])?.status,

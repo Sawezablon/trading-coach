@@ -10,6 +10,7 @@ export type Mt5SyncPayload = {
   accountNumber?: unknown;
   broker?: unknown;
   trades?: unknown;
+  syncRequestId?: unknown;
 };
 
 export type Mt5SyncResult = {
@@ -182,6 +183,7 @@ export async function syncMt5Trades(
 
   const accountNumber = stringValue(payload.accountNumber);
   const broker = optionalString(payload.broker);
+  const syncRequestId = optionalString(payload.syncRequestId);
 
   if (!accountNumber) {
     return { error: "accountNumber is required.", status: 400 };
@@ -285,6 +287,22 @@ export async function syncMt5Trades(
 
   if (syncUpdateError) {
     return { error: syncUpdateError.message, status: 400 };
+  }
+
+  if (syncRequestId) {
+    const { error: requestUpdateError } = await supabase
+      .from("mt5_sync_requests")
+      .update({
+        status: "completed",
+        completed_at: syncedAt,
+      })
+      .eq("id", syncRequestId)
+      .eq("user_id", connection.user_id)
+      .eq("status", "pending");
+
+    if (requestUpdateError) {
+      return { error: requestUpdateError.message, status: 400 };
+    }
   }
 
   return {

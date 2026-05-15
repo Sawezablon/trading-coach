@@ -198,9 +198,10 @@ Optional environment variables:
 ```bash
 MT5_TEST_USER_EMAIL=your-test-user@example.com
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+MT5_TEST_HTTP=1
 ```
 
-If `MT5_TEST_USER_EMAIL` is not set, the script uses the first Supabase auth user in the project.
+If `MT5_TEST_USER_EMAIL` is not set, the script uses the first Supabase auth user in the project. By default the script tests the shared sync handler directly so it matches your local code; set `MT5_TEST_HTTP=1` when you specifically want it to POST to `NEXT_PUBLIC_APP_URL`.
 
 ## MT5 Expert Advisor Setup
 
@@ -222,7 +223,8 @@ To install it:
 QyvexApiKey = your generated API key
 SyncUrl = https://trading-coach-six.vercel.app/api/mt5/sync
 SyncIntervalMinutes = 5
-ClosedDealsLookbackDays = 30
+InitialHistoryLookbackDays = 365
+SyncOverlapMinutes = 10
 ```
 
 Before the EA can send data, enable WebRequest in MetaTrader:
@@ -235,4 +237,6 @@ Before the EA can send data, enable WebRequest in MetaTrader:
 https://trading-coach-six.vercel.app
 ```
 
-The EA is read-only. It collects open positions and closed deals from the recent lookback window, sends them to Qyvex Edge, and never places, modifies, or closes trades. Qyvex Edge handles duplicate MT5 tickets by updating the existing journal row, so deleted synced rows can be recreated on the next sync.
+The EA is read-only. On first run, it sends closed trade history from `InitialHistoryLookbackDays`. After a successful sync, it stores the last successful sync time locally in MT5, then future syncs send open positions plus closed deals since the last successful sync minus `SyncOverlapMinutes`. If MT5 is closed for days, the next launch catches up from the last successful sync. Qyvex Edge handles duplicate MT5 tickets by updating the existing journal row.
+
+If synced MT5 trades are deleted from Qyvex, open **Settings > MT5 Sync** and click **Request 365-day resync**. The EA checks for pending resync requests on every sync, sends the requested history once, and Qyvex marks the request completed after receiving it.

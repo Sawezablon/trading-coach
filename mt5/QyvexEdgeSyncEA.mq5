@@ -4,17 +4,55 @@
 //| This EA does not place, modify, or close trades.                  |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "1.01"
+#property version   "1.03"
 #property description "Read-only Qyvex Edge trade sync EA."
 
 input string QyvexApiKey = "";
 input string SyncUrl = "https://trading-coach-six.vercel.app/api/mt5/sync";
 input int SyncIntervalMinutes = 5;
-input int ClosedDealsLookbackDays = 30;
+input int InitialHistoryLookbackDays = 365;
+input int SyncOverlapMinutes = 10;
 
 datetime g_lastSyncTime = 0;
 string g_lastStatus = "Waiting for first sync";
 int g_lastTradesSent = 0;
+bool g_resyncRequested = false;
+int g_resyncLookbackDays = 0;
+string g_resyncRequestId = "";
+
+string StateKeyPrefix()
+{
+   return "QyvexEdge_" + IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)) + "_";
+}
+
+string FirstSyncKey()
+{
+   return StateKeyPrefix() + "FirstSyncDone";
+}
+
+string LastSuccessfulSyncKey()
+{
+   return StateKeyPrefix() + "LastSuccessfulSync";
+}
+
+bool FirstSyncDone()
+{
+   return GlobalVariableCheck(FirstSyncKey()) && GlobalVariableGet(FirstSyncKey()) > 0;
+}
+
+datetime LastSuccessfulSync()
+{
+   if(!GlobalVariableCheck(LastSuccessfulSyncKey()))
+      return 0;
+
+   return (datetime)GlobalVariableGet(LastSuccessfulSyncKey());
+}
+
+void MarkSyncSuccess(datetime syncTime)
+{
+   GlobalVariableSet(FirstSyncKey(), 1);
+   GlobalVariableSet(LastSuccessfulSyncKey(), (double)syncTime);
+}
 
 string JsonEscape(string value)
 {
@@ -42,6 +80,84 @@ string JsonTime(datetime value)
       return "\"\"";
 
    return JsonString(TimeToString(value, TIME_DATE | TIME_SECONDS));
+}
+
+string UrlEncode(string value)
+{
+   string encoded = "";
+
+   for(int index = 0; index < StringLen(value); index++)
+   {
+      ushort character = StringGetCharacter(value, index);
+
+      if((character >= 'A' && character <= 'Z') ||
+         (character >= 'a' && character <= 'z') ||
+         (character >= '0' && character <= '9') ||
+         character == '-' || character == '_' || character == '.' || character == '~')
+      {
+         encoded += ShortToString(character);
+      }
+      else
+      {
+         encoded += "%" + StringFormat("%02X", character);
+      }
+   }
+
+   return encoded;
+}
+
+string BaseUrl()
+{
+   int marker = StringFind(SyncUrl, "/api/mt5/sync");
+
+   if(marker > 0)
+      return StringSubstr(SyncUrl, 0, marker);
+
+   return SyncUrl;
+}
+
+string ExtractJsonString(string json, string key)
+{
+   string marker = "\"" + key + "\":\"";
+   int start = StringFind(json, marker);
+
+   if(start < 0)
+      return "";
+
+   start += StringLen(marker);
+   int end = StringFind(json, "\"", start);
+
+   if(end < 0)
+      return "";
+
+   return StringSubstr(json, start, end - start);
+}
+
+int ExtractJsonInt(string json, string key, int fallback)
+{
+   string marker = "\"" + key + "\":";
+   int start = StringFind(json, marker);
+
+   if(start < 0)
+      return fallback;
+
+   start += StringLen(marker);
+   string number = "";
+
+   for(int index = start; index < StringLen(json); index++)
+   {
+      ushort character = StringGetCharacter(json, index);
+
+      if(character < '0' || character > '9')
+         break;
+
+      number += ShortToString(character);
+   }
+
+   if(number == "")
+      return fallback;
+
+   return (int)StringToInteger(number);
 }
 
 string DirectionFromDealType(long dealType)
@@ -199,11 +315,25 @@ bool FindEntryDeal(ulong positionId, datetime &openTime, double &entryPrice, str
    return found;
 }
 
+datetime ClosedHistoryFrom()
+{
+   datetime now = TimeCurrent();
+   datetime lastSuccessfulSync = LastSuccessfulSync();
+
+   if(g_resyncRequested)
+      return now - (MathMax(1, g_resyncLookbackDays) * 24 * 60 * 60);
+
+   if(!FirstSyncDone() || lastSuccessfulSync <= 0)
+      return now - (MathMax(1, InitialHistoryLookbackDays) * 24 * 60 * 60);
+
+   return lastSuccessfulSync - (MathMax(0, SyncOverlapMinutes) * 60);
+}
+
 int CollectClosedDeals(string &items)
 {
    int count = 0;
    datetime now = TimeCurrent();
-   datetime historyFrom = now - (MathMax(1, ClosedDealsLookbackDays) * 24 * 60 * 60);
+   datetime historyFrom = ClosedHistoryFrom();
 
    if(!HistorySelect(historyFrom, now))
       return 0;
@@ -270,6 +400,8 @@ string BuildSyncPayload(string tradesJson)
    payload += "\"apiKey\":" + JsonString(QyvexApiKey) + ",";
    payload += "\"accountNumber\":" + JsonString(IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN))) + ",";
    payload += "\"broker\":" + JsonString(AccountInfoString(ACCOUNT_SERVER)) + ",";
+   if(g_resyncRequested && g_resyncRequestId != "")
+      payload += "\"syncRequestId\":" + JsonString(g_resyncRequestId) + ",";
    payload += "\"trades\":[" + tradesJson + "]";
    payload += "}";
    return payload;
@@ -285,9 +417,44 @@ void UpdateChartStatus()
       "Last sync: ", lastSync, "\n",
       "Status: ", g_lastStatus, "\n",
       "Trades sent: ", IntegerToString(g_lastTradesSent), "\n",
-      "Closed deal lookback: ", IntegerToString(MathMax(1, ClosedDealsLookbackDays)), " days\n",
+      "First history sync: ", FirstSyncDone() ? "done" : "pending", "\n",
+      "Manual resync: ", g_resyncRequested ? "pending" : "none", "\n",
       "Sync URL: ", SyncUrl
    );
+}
+
+void CheckResyncRequest()
+{
+   g_resyncRequested = false;
+   g_resyncLookbackDays = 0;
+   g_resyncRequestId = "";
+
+   if(QyvexApiKey == "" || SyncUrl == "")
+      return;
+
+   string requestUrl = BaseUrl() + "/api/mt5/sync-request?apiKey=" + UrlEncode(QyvexApiKey) +
+      "&accountNumber=" + UrlEncode(IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN)));
+   char postData[];
+   char result[];
+   string resultHeaders = "";
+   string headers = "";
+
+   ResetLastError();
+   int statusCode = WebRequest("GET", requestUrl, headers, 10000, postData, result, resultHeaders);
+   string response = CharArrayToString(result, 0, -1, CP_UTF8);
+
+   if(statusCode == -1)
+      return;
+
+   if(statusCode < 200 || statusCode >= 300)
+      return;
+
+   if(StringFind(response, "\"resyncRequired\":true") < 0)
+      return;
+
+   g_resyncRequested = true;
+   g_resyncRequestId = ExtractJsonString(response, "requestId");
+   g_resyncLookbackDays = ExtractJsonInt(response, "lookbackDays", InitialHistoryLookbackDays);
 }
 
 bool SendPayload(string payload, int tradesSent)
@@ -321,6 +488,7 @@ bool SendPayload(string payload, int tradesSent)
    g_lastSyncTime = TimeCurrent();
    g_lastStatus = "Success";
    g_lastTradesSent = tradesSent;
+   MarkSyncSuccess(g_lastSyncTime);
    return true;
 }
 
@@ -337,6 +505,7 @@ void SyncNow()
    string tradesJson = "";
    int tradesSent = 0;
 
+   CheckResyncRequest();
    tradesSent += CollectOpenPositions(tradesJson);
    tradesSent += CollectClosedDeals(tradesJson);
 

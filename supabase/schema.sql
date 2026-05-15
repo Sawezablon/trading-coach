@@ -113,6 +113,19 @@ create table if not exists public.mt5_connections (
   constraint mt5_connections_user_unique unique (user_id)
 );
 
+create table if not exists public.mt5_sync_requests (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  mt5_connection_id uuid references public.mt5_connections(id) on delete set null,
+  account_number text,
+  lookback_days integer not null default 365 check (lookback_days > 0),
+  status text not null default 'pending' check (status in ('pending', 'completed')),
+  requested_at timestamptz not null default now(),
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists profiles_email_idx on public.profiles(email);
 create index if not exists trading_rules_user_id_idx on public.trading_rules(user_id);
 create index if not exists trades_user_created_idx on public.trades(user_id, created_at desc);
@@ -127,6 +140,9 @@ create index if not exists ai_analysis_user_created_idx on public.ai_analysis(us
 create index if not exists ai_analysis_trade_id_idx on public.ai_analysis(trade_id);
 create index if not exists mt5_connections_user_id_idx on public.mt5_connections(user_id);
 create index if not exists mt5_connections_api_key_hash_idx on public.mt5_connections(api_key_hash) where is_active = true;
+create index if not exists mt5_sync_requests_user_created_idx on public.mt5_sync_requests(user_id, created_at desc);
+create index if not exists mt5_sync_requests_connection_status_idx on public.mt5_sync_requests(mt5_connection_id, status, created_at desc);
+create unique index if not exists mt5_sync_requests_one_pending_per_user_idx on public.mt5_sync_requests(user_id) where status = 'pending';
 
 drop trigger if exists set_profiles_updated_at on public.profiles;
 create trigger set_profiles_updated_at
@@ -153,11 +169,17 @@ create trigger set_mt5_connections_updated_at
   before update on public.mt5_connections
   for each row execute function public.set_updated_at();
 
+drop trigger if exists set_mt5_sync_requests_updated_at on public.mt5_sync_requests;
+create trigger set_mt5_sync_requests_updated_at
+  before update on public.mt5_sync_requests
+  for each row execute function public.set_updated_at();
+
 alter table public.profiles enable row level security;
 alter table public.trading_rules enable row level security;
 alter table public.trades enable row level security;
 alter table public.ai_analysis enable row level security;
 alter table public.mt5_connections enable row level security;
+alter table public.mt5_sync_requests enable row level security;
 
 drop policy if exists "Profiles are self-owned" on public.profiles;
 create policy "Profiles are self-owned" on public.profiles
@@ -185,6 +207,12 @@ create policy "AI analysis is self-owned" on public.ai_analysis
 
 drop policy if exists "MT5 connections are self-owned" on public.mt5_connections;
 create policy "MT5 connections are self-owned" on public.mt5_connections
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "MT5 sync requests are self-owned" on public.mt5_sync_requests;
+create policy "MT5 sync requests are self-owned" on public.mt5_sync_requests
   for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);

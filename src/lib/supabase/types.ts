@@ -91,6 +91,19 @@ export type Mt5Connection = {
   updated_at: string;
 };
 
+export type Mt5SyncRequest = {
+  id: string;
+  user_id: string;
+  mt5_connection_id: string | null;
+  account_number: string | null;
+  lookback_days: number;
+  status: "pending" | "completed";
+  requested_at: string;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ChecklistItemResult = {
   id: string;
   label: string;
@@ -176,6 +189,12 @@ export type Database = {
         Row: Mt5Connection;
         Insert: Partial<Mt5Connection> & Pick<Mt5Connection, "user_id" | "api_key_hash">;
         Update: Partial<Mt5Connection>;
+        Relationships: [];
+      };
+      mt5_sync_requests: {
+        Row: Mt5SyncRequest;
+        Insert: Partial<Mt5SyncRequest> & Pick<Mt5SyncRequest, "user_id" | "lookback_days">;
+        Update: Partial<Mt5SyncRequest>;
         Relationships: [];
       };
     };

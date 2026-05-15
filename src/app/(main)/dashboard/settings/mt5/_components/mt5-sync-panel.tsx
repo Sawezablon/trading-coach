@@ -2,15 +2,21 @@
 
 import { useActionState, useMemo, useState } from "react";
 
-import { type GenerateMt5ApiKeyState, generateMt5ApiKeyAction } from "@/app/(main)/dashboard/settings/mt5/actions";
+import {
+  type GenerateMt5ApiKeyState,
+  generateMt5ApiKeyAction,
+  type RequestMt5HistoryResyncState,
+  requestMt5HistoryResyncAction,
+} from "@/app/(main)/dashboard/settings/mt5/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { Mt5ConnectionStatus } from "@/lib/data/mt5";
+import type { Mt5ConnectionStatus, Mt5PendingSyncRequest } from "@/lib/data/mt5";
 
 type Mt5SyncPanelProps = {
   connection: Mt5ConnectionStatus | null;
+  pendingRequest: Mt5PendingSyncRequest | null;
   syncUrl: string;
 };
 
@@ -25,8 +31,12 @@ function formatDateTime(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
-export function Mt5SyncPanel({ connection, syncUrl }: Mt5SyncPanelProps) {
+export function Mt5SyncPanel({ connection, pendingRequest, syncUrl }: Mt5SyncPanelProps) {
   const [state, formAction, pending] = useActionState<GenerateMt5ApiKeyState, FormData>(generateMt5ApiKeyAction, {});
+  const [resyncState, resyncFormAction, resyncPending] = useActionState<RequestMt5HistoryResyncState, FormData>(
+    requestMt5HistoryResyncAction,
+    {},
+  );
   const [copied, setCopied] = useState<"key" | "url" | null>(null);
   const activeConnection = state.connection ?? connection;
   const apiKey = state.apiKey;
@@ -36,6 +46,7 @@ export function Mt5SyncPanel({ connection, syncUrl }: Mt5SyncPanelProps) {
     : activeConnection?.is_active
       ? "Ready"
       : "Not connected";
+  const hasPendingResync = Boolean(pendingRequest ?? resyncState.ok);
 
   const maskedKey = useMemo(() => {
     if (apiKey) {
@@ -123,6 +134,30 @@ export function Mt5SyncPanel({ connection, syncUrl }: Mt5SyncPanelProps) {
           <StatusRow label="Last sync" value={formatDateTime(activeConnection?.last_sync_at)} />
           <StatusRow label="Account" value={activeConnection?.account_number ?? "Waiting for first MT5 sync"} />
           <StatusRow label="Broker" value={activeConnection?.broker ?? "Waiting for first MT5 sync"} />
+          <div className="rounded-2xl border bg-secondary/40 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="font-medium text-sm">History resync</div>
+                <p className="mt-1 text-muted-foreground text-xs">
+                  Request this if you deleted MT5-imported trades and want the EA to resend history once.
+                </p>
+              </div>
+              <Badge variant="secondary" className={hasPendingResync ? "bg-warning/10 text-warning" : ""}>
+                {hasPendingResync ? "Pending" : "Idle"}
+              </Badge>
+            </div>
+            <form action={resyncFormAction} className="mt-4">
+              <Button type="submit" variant="outline" disabled={resyncPending || !hasConnection}>
+                {resyncPending ? "Requesting..." : "Request 365-day resync"}
+              </Button>
+            </form>
+            {resyncState.error ? <p className="mt-3 text-destructive text-xs">{resyncState.error}</p> : null}
+            {hasPendingResync ? (
+              <p className="mt-3 text-muted-foreground text-xs">
+                The EA will pick this up on its next sync and mark it complete after sending history.
+              </p>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
     </div>
