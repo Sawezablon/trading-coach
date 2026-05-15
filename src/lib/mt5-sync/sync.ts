@@ -343,10 +343,10 @@ export async function syncMt5Trades(
     }
   }
 
-  if (payload.trades.length > 0 && created + updated === 0 && skipped > 0) {
+  if (payload.trades.length > 0 && created + updated === 0) {
     return {
       error: `MT5 sync received ${payload.trades.length} trade(s), but none were saved. First error: ${
-        firstSkipReason ?? "Unknown save error."
+        firstSkipReason ?? `No insert/update was performed. Skipped: ${skipped}.`
       }`,
       status: 400,
     };

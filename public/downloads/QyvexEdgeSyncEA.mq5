@@ -424,6 +424,43 @@ string BuildSyncPayload(string tradesJson)
    return payload;
 }
 
+bool ExtractNextJsonObject(string source, int &cursor, string &item)
+{
+   int depth = 0;
+   int start = -1;
+   int length = StringLen(source);
+
+   for(int index = cursor; index < length; index++)
+   {
+      ushort character = StringGetCharacter(source, index);
+
+      if(character == '{')
+      {
+         if(depth == 0)
+            start = index;
+
+         depth++;
+      }
+      else if(character == '}')
+      {
+         depth--;
+
+         if(depth == 0 && start >= 0)
+         {
+            item = StringSubstr(source, start, index - start + 1);
+            cursor = index + 1;
+
+            while(cursor < length && StringGetCharacter(source, cursor) == ',')
+               cursor++;
+
+            return true;
+         }
+      }
+   }
+
+   return false;
+}
+
 void UpdateChartStatus()
 {
    string lastSync = g_lastSyncTime > 0 ? TimeToString(g_lastSyncTime, TIME_DATE | TIME_SECONDS) : "Never";
@@ -537,6 +574,43 @@ bool SendPayload(string payload, int tradesSent)
    return true;
 }
 
+bool SendTradeItems(string tradesJson, int tradesSent)
+{
+   if(tradesSent <= 1)
+      return SendPayload(BuildSyncPayload(tradesJson), tradesSent);
+
+   int cursor = 0;
+   int sent = 0;
+   string item = "";
+
+   while(ExtractNextJsonObject(tradesJson, cursor, item))
+   {
+      sent++;
+
+      if(!SendPayload(BuildSyncPayload(item), 1))
+      {
+         g_lastStatus = "Failed on trade " + IntegerToString(sent) + "/" + IntegerToString(tradesSent) +
+            ". " + g_lastStatus;
+         g_lastTradesSent = sent;
+         return false;
+      }
+   }
+
+   if(sent != tradesSent)
+   {
+      g_lastStatus = "Failed. Prepared " + IntegerToString(tradesSent) +
+         " trades, parsed " + IntegerToString(sent) + " payload items.";
+      g_lastTradesSent = sent;
+      return false;
+   }
+
+   g_lastSyncTime = TimeCurrent();
+   g_lastStatus = "Success. Sent " + IntegerToString(sent) + " trade payloads.";
+   g_lastTradesSent = sent;
+   MarkSyncSuccess(g_lastSyncTime);
+   return true;
+}
+
 void SyncNow()
 {
    if(QyvexApiKey == "" || SyncUrl == "")
@@ -554,8 +628,7 @@ void SyncNow()
    tradesSent += CollectOpenPositions(tradesJson);
    tradesSent += CollectClosedDeals(tradesJson);
 
-   string payload = BuildSyncPayload(tradesJson);
-   SendPayload(payload, tradesSent);
+   SendTradeItems(tradesJson, tradesSent);
 
    UpdateChartStatus();
 }
