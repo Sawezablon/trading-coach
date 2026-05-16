@@ -76,9 +76,25 @@ function getUserChecklistScore(trade: TradeWithAnalysis) {
   return Math.round((items.filter((item) => item.status === "passed").length / items.length) * 100);
 }
 
-function getDashboardUserChecklistScore(trades: TradeWithAnalysis[]) {
+function getDashboardUserChecklistState(trades: TradeWithAnalysis[]) {
   const scores = trades.map(getUserChecklistScore).filter((score): score is number => score !== null);
-  return scores.length ? average(scores) : 0;
+
+  return {
+    hasData: scores.length > 0,
+    reviewedCount: scores.length,
+    score: scores.length ? average(scores) : 0,
+    totalCount: trades.length,
+  };
+}
+
+function weightedAverage(parts: { score: number; weight: number }[]) {
+  const totalWeight = parts.reduce((sum, part) => sum + part.weight, 0);
+
+  if (totalWeight === 0) {
+    return 0;
+  }
+
+  return Math.round(parts.reduce((sum, part) => sum + part.score * part.weight, 0) / totalWeight);
 }
 
 function average(values: number[]) {
@@ -158,15 +174,51 @@ function getDisciplineIntelligence({
   reviewCompletion: number;
   trades: TradeWithAnalysis[];
 }) {
+  const reviewedTrades = trades.filter((trade) => trade.review_status === "reviewed");
+  const unreviewedTrades = trades.filter((trade) => trade.review_status === "needs_review");
   const emotionReviewedTrades = trades.filter((trade) => parseEmotionValues(trade.emotions).length > 0);
   const emotionalControl = emotionReviewedTrades.length
     ? Math.round(((emotionReviewedTrades.length - highRiskEmotionTrades.length) / emotionReviewedTrades.length) * 100)
-    : 0;
+    : null;
   const systemScore = metrics.averageSystemScore || (metrics.mt5SyncedTrades ? 0 : 100);
-  const userChecklistScore = getDashboardUserChecklistScore(trades);
-  const intelligenceScore = trades.length
-    ? Math.round(systemScore * 0.35 + userChecklistScore * 0.25 + reviewCompletion * 0.25 + emotionalControl * 0.15)
-    : 0;
+  const userChecklist = getDashboardUserChecklistState(trades);
+  const intelligenceParts = [
+    { score: systemScore, weight: 0.45 },
+    { score: reviewCompletion, weight: 0.35 },
+    ...(userChecklist.hasData ? [{ score: userChecklist.score, weight: 0.15 }] : []),
+    ...(emotionalControl === null ? [] : [{ score: emotionalControl, weight: 0.05 }]),
+  ];
+  const intelligenceScore = trades.length ? weightedAverage(intelligenceParts) : 0;
+  const diagnosis =
+    unreviewedTrades.length && systemScore >= 80
+      ? {
+          detail: `${unreviewedTrades.length} imported trade${unreviewedTrades.length === 1 ? "" : "s"} still need screenshot, emotion, and manual checklist review before psychology can be scored.`,
+          label: "Trade facts look mostly healthy. Manual context is missing.",
+          tone: "warning" as const,
+        }
+      : metrics.systemAlerts > 0
+        ? {
+            detail: `${metrics.systemAlerts} automatic system alert${metrics.systemAlerts === 1 ? "" : "s"} need attention from risk, RR, session, pair, direction, or stop/take-profit data.`,
+            label: "System checks found measurable rule pressure.",
+            tone: "warning" as const,
+          }
+        : userChecklist.hasData && userChecklist.score < 70
+          ? {
+              detail: "Manual confirmations are the weakest reviewed area. Tighten your checklist before entry.",
+              label: "Checklist behavior is weakening discipline.",
+              tone: "warning" as const,
+            }
+          : emotionalControl !== null && emotionalControl < 70
+            ? {
+                detail: "High-risk emotional tags are appearing in reviewed trades.",
+                label: "Psychology is starting to affect execution quality.",
+                tone: "warning" as const,
+              }
+            : {
+                detail: "Keep reviewing imported trades so Qyvex can separate execution facts from trader behavior.",
+                label: "Execution profile is balanced.",
+                tone: "healthy" as const,
+              };
   const leakCandidates = [
     {
       action: metrics.needsReviewTrades
@@ -186,36 +238,48 @@ function getDisciplineIntelligence({
       label: "System rules",
       score: systemScore,
     },
-    {
-      action: "Complete the user checklist before saving trades",
-      detail: `${userChecklistScore}% user checklist discipline.`,
-      href: "/dashboard/upload",
-      label: "User checklist",
-      score: userChecklistScore,
-    },
-    {
-      action: highRiskEmotionTrades.length
-        ? "Review high-risk emotional entries before the next session"
-        : "Keep tagging emotions before entry",
-      detail: `${highRiskEmotionTrades.length} high-risk emotional trade${highRiskEmotionTrades.length === 1 ? "" : "s"}.`,
-      href: "/dashboard/journal",
-      label: "Emotional control",
-      score: emotionalControl,
-    },
+    ...(userChecklist.hasData
+      ? [
+          {
+            action: "Complete the user checklist before saving trades",
+            detail: `${userChecklist.score}% user checklist discipline across reviewed trades.`,
+            href: "/dashboard/upload",
+            label: "User checklist",
+            score: userChecklist.score,
+          },
+        ]
+      : []),
+    ...(emotionalControl === null
+      ? []
+      : [
+          {
+            action: highRiskEmotionTrades.length
+              ? "Review high-risk emotional entries before the next session"
+              : "Keep tagging emotions before entry",
+            detail: `${highRiskEmotionTrades.length} high-risk emotional trade${highRiskEmotionTrades.length === 1 ? "" : "s"}.`,
+            href: "/dashboard/journal",
+            label: "Emotional control",
+            score: emotionalControl,
+          },
+        ]),
   ];
   const primaryLeak = leakCandidates.sort((left, right) => left.score - right.score)[0];
   const recentScores = trades.slice(0, 8).reverse().map(getTradeIntelligenceScore);
   const trend = getTrendLabel(recentScores);
 
   return {
+    diagnosis,
     emotionalControl,
+    emotionReviewedCount: emotionReviewedTrades.length,
     intelligenceScore,
     primaryLeak,
     recentScores,
+    reviewedCount: reviewedTrades.length,
     reviewCompletion,
     systemScore,
     trend,
-    userChecklistScore,
+    unreviewedCount: unreviewedTrades.length,
+    userChecklist,
   };
 }
 
@@ -437,8 +501,19 @@ function DailySnapshotHero({
 
 function DisciplineIntelligence({ model }: { model: ReturnType<typeof getDashboardModel> }) {
   const { disciplineIntelligence, metrics, mostFailedRule, ruleAdherence } = model;
-  const { emotionalControl, intelligenceScore, primaryLeak, recentScores, systemScore, trend, userChecklistScore } =
-    disciplineIntelligence;
+  const {
+    diagnosis,
+    emotionalControl,
+    emotionReviewedCount,
+    intelligenceScore,
+    primaryLeak,
+    recentScores,
+    reviewedCount,
+    systemScore,
+    trend,
+    unreviewedCount,
+    userChecklist,
+  } = disciplineIntelligence;
 
   return (
     <Card className="border-primary/15 bg-gradient-to-br from-card to-secondary/50 xl:col-span-5">
@@ -480,27 +555,37 @@ function DisciplineIntelligence({ model }: { model: ReturnType<typeof getDashboa
           </div>
         </div>
 
+        <DiagnosisPanel diagnosis={diagnosis} reviewedCount={reviewedCount} unreviewedCount={unreviewedCount} />
+
         <div className="grid gap-3">
           <DisciplineSplitCard
             systemAlerts={metrics.systemAlerts}
             systemScore={systemScore}
-            userScore={userChecklistScore}
+            userChecklist={userChecklist}
           />
           <BreakdownRow label="System discipline" value={systemScore} detail={`${metrics.systemAlerts} alerts`} />
           <BreakdownRow
-            label="User checklist discipline"
-            value={userChecklistScore}
-            detail="Manual confirmations only"
-          />
-          <BreakdownRow
-            label="Review discipline"
+            label="Review progress"
             value={disciplineIntelligence.reviewCompletion}
-            detail={`${metrics.needsReviewTrades} waiting`}
+            detail={`${reviewedCount}/${reviewedCount + unreviewedCount} reviewed`}
           />
           <BreakdownRow
-            label="Emotional control"
+            detail={
+              userChecklist.hasData
+                ? `${userChecklist.reviewedCount} reviewed trade${userChecklist.reviewedCount === 1 ? "" : "s"} with manual checklist data`
+                : "Waiting for reviewed trades with manual confirmations"
+            }
+            label="User checklist discipline"
+            value={userChecklist.hasData ? userChecklist.score : null}
+          />
+          <BreakdownRow
+            detail={
+              emotionalControl === null
+                ? "Waiting for emotion tags from reviewed trades"
+                : `${emotionReviewedCount} emotion-tagged trade${emotionReviewedCount === 1 ? "" : "s"}, ${model.highRiskEmotionTrades.length} high-risk`
+            }
+            label="Emotional context"
             value={emotionalControl}
-            detail={`${model.highRiskEmotionTrades.length} high-risk`}
           />
         </div>
 
@@ -812,7 +897,40 @@ function IntelligenceTile({ detail, label, value }: { detail: string; label: str
   );
 }
 
-function BreakdownRow({ detail, label, value }: { detail: string; label: string; value: number }) {
+function DiagnosisPanel({
+  diagnosis,
+  reviewedCount,
+  unreviewedCount,
+}: {
+  diagnosis: { detail: string; label: string; tone: "healthy" | "warning" };
+  reviewedCount: number;
+  unreviewedCount: number;
+}) {
+  return (
+    <div className="rounded-2xl border border-primary/15 bg-background/35 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-muted-foreground text-xs">Diagnosis</div>
+          <div className="mt-1 font-semibold text-base">{diagnosis.label}</div>
+          <p className="mt-2 text-muted-foreground text-sm">{diagnosis.detail}</p>
+        </div>
+        <Badge
+          className={diagnosis.tone === "warning" ? "bg-[#F59E0B]/10 text-[#F59E0B]" : "bg-[#22C55E]/10 text-[#22C55E]"}
+        >
+          {diagnosis.tone === "warning" ? "Needs context" : "Healthy"}
+        </Badge>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <MiniMetric label="Reviewed" value={reviewedCount} />
+        <MiniMetric label="Awaiting review" value={unreviewedCount} />
+      </div>
+    </div>
+  );
+}
+
+function BreakdownRow({ detail, label, value }: { detail: string; label: string; value: number | null }) {
+  const hasScore = value !== null;
+
   return (
     <div className="rounded-2xl border bg-secondary/35 p-3">
       <div className="flex items-center justify-between gap-3">
@@ -820,9 +938,13 @@ function BreakdownRow({ detail, label, value }: { detail: string; label: string;
           <div className="font-medium text-sm">{label}</div>
           <div className="text-muted-foreground text-xs">{detail}</div>
         </div>
-        <div className="font-semibold">{value}%</div>
+        <div className="font-semibold">{hasScore ? `${value}%` : "Waiting"}</div>
       </div>
-      <Progress value={value} className="mt-3" />
+      {hasScore ? (
+        <Progress value={value} className="mt-3" />
+      ) : (
+        <div className="mt-3 h-2 rounded-full border bg-background/50" />
+      )}
     </div>
   );
 }
@@ -830,12 +952,14 @@ function BreakdownRow({ detail, label, value }: { detail: string; label: string;
 function DisciplineSplitCard({
   systemAlerts,
   systemScore,
-  userScore,
+  userChecklist,
 }: {
   systemAlerts: number;
   systemScore: number;
-  userScore: number;
+  userChecklist: ReturnType<typeof getDashboardUserChecklistState>;
 }) {
+  const averageScore = userChecklist.hasData ? Math.round((systemScore + userChecklist.score) / 2) : systemScore;
+
   return (
     <div className="rounded-2xl border border-primary/15 bg-[linear-gradient(135deg,rgb(124_92_255/0.12),rgb(94_234_212/0.05))] p-4">
       <div className="flex items-center justify-between gap-3">
@@ -844,7 +968,7 @@ function DisciplineSplitCard({
           <div className="text-muted-foreground text-xs">Automatic facts vs manual confirmations.</div>
         </div>
         <Badge variant="outline" className="rounded-full">
-          {Math.round((systemScore + userScore) / 2)}% avg
+          {averageScore}% known
         </Badge>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -858,9 +982,19 @@ function DisciplineSplitCard({
         </div>
         <div className="rounded-2xl border bg-background/35 p-3">
           <div className="text-muted-foreground text-xs">User checklist discipline</div>
-          <div className="mt-1 font-semibold text-3xl">{userScore}%</div>
-          <div className="mt-2 text-muted-foreground text-xs">Manual confirmations completed.</div>
-          <Progress value={userScore} className="mt-3" />
+          <div className="mt-1 font-semibold text-3xl">
+            {userChecklist.hasData ? `${userChecklist.score}%` : "Waiting"}
+          </div>
+          <div className="mt-2 text-muted-foreground text-xs">
+            {userChecklist.hasData
+              ? `${userChecklist.reviewedCount} trade${userChecklist.reviewedCount === 1 ? "" : "s"} with manual confirmations.`
+              : "Not scored until reviewed trades have manual checklist confirmations."}
+          </div>
+          {userChecklist.hasData ? (
+            <Progress value={userChecklist.score} className="mt-3" />
+          ) : (
+            <div className="mt-3 h-2 rounded-full border bg-background/50" />
+          )}
         </div>
       </div>
     </div>
