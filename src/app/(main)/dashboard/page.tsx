@@ -258,7 +258,7 @@ function DailySnapshotHero({
         <div className="grid content-between gap-4 rounded-2xl border border-border/70 bg-background/35 p-4 backdrop-blur">
           <div className="grid gap-3 sm:grid-cols-2">
             <HeroMetric label="Needs review" value={metrics.needsReviewTrades} tone="warning" />
-            <HeroMetric label="Failed-rule trades" value={metrics.failedRuleTrades} tone="danger" />
+            <HeroMetric label="System alerts" value={metrics.systemAlerts} tone="warning" />
             <HeroMetric label="Win rate" value={`${metrics.winRate}%`} tone="neutral" />
             <HeroMetric label="Total P/L" value={metrics.totalProfitLoss} tone="neutral" />
           </div>
@@ -302,6 +302,11 @@ function DisciplineIntelligence({ model }: { model: ReturnType<typeof getDashboa
             label="Review completion"
             value={`${reviewCompletion}%`}
             detail={`${metrics.needsReviewTrades} waiting.`}
+          />
+          <IntelligenceTile
+            label="System score"
+            value={`${metrics.averageSystemScore}%`}
+            detail="Automatic MT5 fact review."
           />
           <IntelligenceTile
             label="Most failed rule"
@@ -380,6 +385,12 @@ function RiskMonitoring({ model }: { model: ReturnType<typeof getDashboardModel>
           label="No take profit"
           value={metrics.tradesWithoutTakeProfit}
           severe={metrics.tradesWithoutTakeProfit > 0}
+        />
+        <RiskRow label="System alert trades" value={metrics.systemAlertTrades} severe={metrics.systemAlertTrades > 0} />
+        <RiskRow
+          label="Avg estimated risk"
+          value={`${metrics.averageEstimatedRiskPercent}%`}
+          severe={metrics.averageEstimatedRiskPercent > 2}
         />
         <RiskRow
           label="High-risk emotion trades"

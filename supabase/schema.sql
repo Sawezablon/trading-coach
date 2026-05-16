@@ -92,6 +92,7 @@ create table if not exists public.trades (
   synced_from_mt5 boolean not null default false,
   last_synced_at timestamptz,
   mt5_raw_data jsonb,
+  system_analysis jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint trades_status_outcome_check check (

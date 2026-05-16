@@ -4,6 +4,22 @@ export type TradeStatus = "open" | "closed";
 export type TradeResult = "pending" | "win" | "loss" | "breakeven";
 export type TradeDirection = "long" | "short";
 export type TradeReviewStatus = "needs_review" | "reviewed";
+export type SystemReviewStatus = "passed" | "warning" | "failed" | "info";
+
+export type SystemReviewItem = {
+  id: string;
+  label: string;
+  status: SystemReviewStatus;
+  severity: "low" | "medium" | "high";
+  detail: string;
+};
+
+export type SystemTradeReview = {
+  score: number;
+  generated_at: string;
+  items: SystemReviewItem[];
+  summary: string;
+};
 
 export type Trade = {
   id: string;
@@ -58,6 +74,7 @@ export type Trade = {
   synced_from_mt5: boolean;
   last_synced_at: string | null;
   mt5_raw_data: Json | null;
+  system_analysis: SystemTradeReview | null;
   created_at: string;
   updated_at: string;
 };

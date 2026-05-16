@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ChecklistItemResult, RuleSettings, Trade } from "@/lib/supabase/types";
+import { evaluateSystemTradeReview } from "@/lib/system-review";
 import { asIsoDateTime, type ParsedTradeForm, parseTradeFormData } from "@/lib/trade-form";
 import { evaluateTradeChecklist } from "@/lib/trade-rules";
 
@@ -211,6 +212,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       mt5_broker: selectedConnection?.broker ?? null,
       screenshot_url: screenshotUrl,
       ...checklistUpdate,
+      system_analysis: evaluateSystemTradeReview({
+        ...(existingTrade as Trade),
+        ...parsed.data,
+      }),
       review_status: "reviewed",
       review_completed_at: new Date().toISOString(),
     })

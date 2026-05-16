@@ -4,6 +4,7 @@ import { analyzeTrade } from "@/lib/ai/analyze-trade";
 import { demoRules } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { RuleSettings } from "@/lib/supabase/types";
+import { evaluateSystemTradeReview } from "@/lib/system-review";
 import { asIsoDateTime, parseTradeFormData } from "@/lib/trade-form";
 import { evaluateTradeChecklist } from "@/lib/trade-rules";
 
@@ -202,6 +203,7 @@ export async function POST(request: Request) {
     }
   }
 
+  const systemAnalysis = evaluateSystemTradeReview(tradeInput);
   const { data: trade, error: tradeError } = await supabase
     .from("trades")
     .insert({
@@ -216,6 +218,7 @@ export async function POST(request: Request) {
       failed_rules: checklist.failedRules,
       checklist_completion_rate: checklist.completionRate,
       discipline_score: checklist.disciplineScore,
+      system_analysis: systemAnalysis,
       review_status: "reviewed",
       review_completed_at: now,
     })
@@ -233,6 +236,7 @@ export async function POST(request: Request) {
     imageDataUrl,
     rules,
     checklist,
+    systemAnalysis,
   });
 
   const { data: analysis, error: analysisError } = await supabase

@@ -26,6 +26,7 @@ type AnalyzeTradeInput = {
     completionRate: number;
     disciplineScore: number;
   };
+  systemAnalysis?: unknown;
   tradesToday?: number;
 };
 
@@ -99,7 +100,8 @@ Confirmation: ${input.confirmation ? "yes" : "no"}
 Emotions: ${input.emotions}
 Notes: ${input.notes}
 Rules: ${JSON.stringify(input.rules)}
-Checklist results: ${JSON.stringify(input.checklist ?? null)}`,
+Checklist results: ${JSON.stringify(input.checklist ?? null)}
+Qyvex system review: ${JSON.stringify(input.systemAnalysis ?? null)}`,
             },
             ...(input.imageDataUrl
               ? [{ type: "input_image" as const, image_url: input.imageDataUrl, detail: "low" as const }]

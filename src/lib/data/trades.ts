@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { demoRules, demoTrades } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { AiAnalysis, RuleSettings, TradeWithAnalysis } from "@/lib/supabase/types";
+import { getSystemReviewItems, getSystemReviewScore } from "@/lib/system-review";
 
 export type DashboardMetrics = {
   totalTrades: number;
@@ -25,6 +26,10 @@ export type DashboardMetrics = {
   mt5SyncedTrades: number;
   tradesWithoutStopLoss: number;
   tradesWithoutTakeProfit: number;
+  systemAlertTrades: number;
+  systemAlerts: number;
+  averageSystemScore: number;
+  averageEstimatedRiskPercent: number;
 };
 
 export async function getSessionUser() {
@@ -125,6 +130,29 @@ export function calculateDashboardMetrics(trades: TradeWithAnalysis[]): Dashboar
   const tradesWithoutTakeProfit = trades.filter(
     (trade) => trade.synced_from_mt5 && Number(trade.take_profit ?? 0) <= 0,
   ).length;
+  const systemItemsByTrade = trades.map((trade) => getSystemReviewItems(trade.system_analysis));
+  const systemAlertTrades = systemItemsByTrade.filter((items) =>
+    items.some((item) => item.status === "failed" || item.status === "warning"),
+  ).length;
+  const systemAlerts = systemItemsByTrade
+    .flat()
+    .filter((item) => item.status === "failed" || item.status === "warning").length;
+  const tradesWithSystemScores = trades.filter((trade) => getSystemReviewScore(trade.system_analysis) > 0);
+  const averageSystemScore = tradesWithSystemScores.length
+    ? Math.round(
+        tradesWithSystemScores.reduce((sum, trade) => sum + getSystemReviewScore(trade.system_analysis), 0) /
+          tradesWithSystemScores.length,
+      )
+    : 0;
+  const tradesWithEstimatedRisk = trades.filter((trade) => trade.estimated_risk_percent !== null);
+  const averageEstimatedRiskPercent = tradesWithEstimatedRisk.length
+    ? Number(
+        (
+          tradesWithEstimatedRisk.reduce((sum, trade) => sum + Number(trade.estimated_risk_percent ?? 0), 0) /
+          tradesWithEstimatedRisk.length
+        ).toFixed(2),
+      )
+    : 0;
   const wins = closedTrades.filter((trade) => trade.outcome === "win").length;
   const losses = closedTrades.filter((trade) => trade.outcome === "loss").length;
   const breakevens = closedTrades.filter((trade) => trade.outcome === "breakeven").length;
@@ -185,5 +213,9 @@ export function calculateDashboardMetrics(trades: TradeWithAnalysis[]): Dashboar
     mt5SyncedTrades,
     tradesWithoutStopLoss,
     tradesWithoutTakeProfit,
+    systemAlertTrades,
+    systemAlerts,
+    averageSystemScore,
+    averageEstimatedRiskPercent,
   };
 }

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database, Json, TradeDirection, TradeResult, TradeStatus } from "../supabase/types";
+import { evaluateSystemTradeReview } from "../system-review";
 import { createHash } from "node:crypto";
 
 export type Mt5TradePayload = Record<string, unknown>;
@@ -210,6 +211,22 @@ function mapMt5Trade({
 
   const status = normalizeStatus(rawTrade.status, closedAt);
   const profit = numberValue(rawTrade.profit);
+  const accountCurrency = optionalString(rawTrade.accountCurrency);
+  const systemAnalysis = evaluateSystemTradeReview(
+    {
+      account_balance_at_sync: accountBalance,
+      account_currency: accountCurrency,
+      estimated_risk_amount: estimatedRisk.amount,
+      estimated_risk_percent: estimatedRisk.percent,
+      profit_loss_amount: status === "closed" ? profit : null,
+      risk_calculation_method: estimatedRisk.method,
+      status,
+      stop_loss: stopLoss,
+      take_profit: takeProfit,
+      trade_taken_at: tradeTakenAt,
+    },
+    syncedAt,
+  );
 
   return {
     user_id: userId,
@@ -237,7 +254,7 @@ function mapMt5Trade({
     swap: numberValue(rawTrade.swap),
     account_balance_at_sync: accountBalance,
     account_equity_at_sync: positiveNumberValue(rawTrade.accountEquity),
-    account_currency: optionalString(rawTrade.accountCurrency),
+    account_currency: accountCurrency,
     symbol_tick_value: tickValue,
     symbol_tick_size: tickSize,
     symbol_contract_size: positiveNumberValue(rawTrade.contractSize),
@@ -262,6 +279,7 @@ function mapMt5Trade({
     synced_from_mt5: true,
     last_synced_at: syncedAt,
     mt5_raw_data: rawTrade as Json,
+    system_analysis: systemAnalysis,
   };
 }
 
@@ -302,6 +320,7 @@ function getMt5FactUpdate(
     synced_from_mt5: true,
     last_synced_at: tradeInput.last_synced_at,
     mt5_raw_data: tradeInput.mt5_raw_data,
+    system_analysis: tradeInput.system_analysis,
     ...reviewUpdate,
   } satisfies TradeUpdate;
 }

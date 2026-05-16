@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { getPrimaryAnalysis, getTrade } from "@/lib/data/trades";
 import { formatEmotions } from "@/lib/emotions";
 import { formatTradeDateTime, getTradeTimeZone } from "@/lib/format-trade-time";
+import { getSystemReviewItems, getSystemReviewScore } from "@/lib/system-review";
 
 export default async function TradeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -29,6 +30,8 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
     trade.estimated_risk_amount === null
       ? null
       : `${trade.account_currency ? `${trade.account_currency} ` : ""}${Number(trade.estimated_risk_amount).toFixed(2)}`;
+  const systemReviewItems = getSystemReviewItems(trade.system_analysis);
+  const systemReviewScore = getSystemReviewScore(trade.system_analysis);
 
   return (
     <div className="grid gap-6 xl:grid-cols-12">
@@ -136,6 +139,34 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
 
         <Card>
           <CardHeader>
+            <CardTitle>Qyvex system review</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {systemReviewItems.length ? (
+              <>
+                <Score label="System fact score" value={systemReviewScore} />
+                <div className="grid gap-3">
+                  {systemReviewItems.map((item) => (
+                    <div key={item.id} className="rounded-2xl border bg-secondary/30 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-medium">{item.label}</div>
+                        <Badge className={getSystemStatusClass(item.status)}>{item.status}</Badge>
+                      </div>
+                      <div className="mt-1 text-muted-foreground text-sm">{item.detail}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="text-muted-foreground text-sm">
+                No automatic system review has been generated for this trade yet.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Completed checklist</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -224,6 +255,22 @@ function formatRiskMethod(method: string | null | undefined) {
   };
 
   return labels[method] ?? method.replaceAll("_", " ");
+}
+
+function getSystemStatusClass(status: string) {
+  if (status === "passed") {
+    return "bg-[#22C55E]/10 text-[#22C55E]";
+  }
+
+  if (status === "failed") {
+    return "bg-destructive/10 text-destructive";
+  }
+
+  if (status === "warning") {
+    return "bg-[#F59E0B]/10 text-[#F59E0B]";
+  }
+
+  return "bg-primary/10 text-primary";
 }
 
 function Score({ label, value }: { label: string; value: number }) {

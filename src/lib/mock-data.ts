@@ -98,6 +98,7 @@ export const demoTrades: TradeWithAnalysis[] = [
     synced_from_mt5: false,
     last_synced_at: null,
     mt5_raw_data: null,
+    system_analysis: null,
     created_at: new Date("2026-05-12T09:15:00.000Z").toISOString(),
     updated_at: new Date("2026-05-12T09:15:00.000Z").toISOString(),
     ai_analysis: [demoAnalysis],
@@ -155,6 +156,7 @@ export const demoTrades: TradeWithAnalysis[] = [
     synced_from_mt5: false,
     last_synced_at: null,
     mt5_raw_data: null,
+    system_analysis: null,
     created_at: new Date("2026-05-11T14:40:00.000Z").toISOString(),
     updated_at: new Date("2026-05-11T14:40:00.000Z").toISOString(),
     ai_analysis: [
@@ -221,6 +223,7 @@ export const demoTrades: TradeWithAnalysis[] = [
     synced_from_mt5: false,
     last_synced_at: null,
     mt5_raw_data: null,
+    system_analysis: null,
     created_at: new Date("2026-05-10T03:05:00.000Z").toISOString(),
     updated_at: new Date("2026-05-10T03:05:00.000Z").toISOString(),
     ai_analysis: [
