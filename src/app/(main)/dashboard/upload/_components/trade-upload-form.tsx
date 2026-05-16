@@ -15,7 +15,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import type { Mt5ConnectionStatus } from "@/lib/data/mt5";
 import { emotionOptions, parseEmotionValues } from "@/lib/emotions";
+import { getMt5ConnectionLabel } from "@/lib/mt5-label";
 import type { RuleSettings, Trade, TradeDirection, TradeResult, TradeStatus } from "@/lib/supabase/types";
 import { evaluateTradeChecklist } from "@/lib/trade-rules";
 
@@ -27,6 +29,8 @@ type TradeResponse = {
 type TradeFormProps = {
   rules: RuleSettings;
   tradeTimestamps: string[];
+  connections: Mt5ConnectionStatus[];
+  selectedConnectionId: string | null;
   initialTrade?: Trade;
 };
 
@@ -55,7 +59,13 @@ function optionalDateTimeValue(value: string | null | undefined) {
   return value ? toDatetimeLocalValue(new Date(value)) : "";
 }
 
-export function TradeUploadForm({ rules, tradeTimestamps, initialTrade }: TradeFormProps) {
+export function TradeUploadForm({
+  rules,
+  tradeTimestamps,
+  connections,
+  selectedConnectionId,
+  initialTrade,
+}: TradeFormProps) {
   const router = useRouter();
   const inputId = useId();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -64,6 +74,7 @@ export function TradeUploadForm({ rules, tradeTimestamps, initialTrade }: TradeF
   const [pending, setPending] = useState(false);
   const [pair, setPair] = useState(initialTrade?.pair ?? "");
   const [direction, setDirection] = useState<TradeDirection>(initialTrade?.direction ?? "long");
+  const [mt5ConnectionId, setMt5ConnectionId] = useState(initialTrade?.mt5_connection_id ?? selectedConnectionId ?? "");
   const [tradeTakenAt, setTradeTakenAt] = useState(() =>
     initialTrade ? toDatetimeLocalValue(new Date(initialTrade.trade_taken_at)) : toDatetimeLocalValue(new Date()),
   );
@@ -147,6 +158,7 @@ export function TradeUploadForm({ rules, tradeTimestamps, initialTrade }: TradeF
     formData.set("status", status);
     formData.set("outcome", status === "open" ? "pending" : outcome);
     formData.set("manual_rule_ids", manualRuleIds.join(","));
+    formData.set("mt5_connection_id", mt5ConnectionId);
     if (file) {
       formData.set("screenshot", file);
     }
@@ -232,6 +244,29 @@ export function TradeUploadForm({ rules, tradeTimestamps, initialTrade }: TradeF
                 </SelectContent>
               </Select>
             </div>
+
+            {connections.length ? (
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="mt5_connection_id">Trading account</Label>
+                <Select name="mt5_connection_id" value={mt5ConnectionId} onValueChange={setMt5ConnectionId}>
+                  <SelectTrigger id="mt5_connection_id">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {connections.map((connection) => (
+                      <SelectItem key={connection.id} value={connection.id}>
+                        {getMt5ConnectionLabel(connection)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-muted-foreground text-xs">
+                  Manual entries saved here stay inside this same account view.
+                </p>
+              </div>
+            ) : (
+              <input type="hidden" name="mt5_connection_id" value="" />
+            )}
 
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="trade_taken_at">Trade date &amp; time</Label>

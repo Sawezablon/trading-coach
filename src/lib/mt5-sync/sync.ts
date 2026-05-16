@@ -492,6 +492,12 @@ export async function syncMt5Trades(
     return { error: syncUpdateError.message, status: 400 };
   }
 
+  await supabase
+    .from("profiles")
+    .update({ selected_mt5_connection_id: connection.id })
+    .eq("id", connection.user_id)
+    .is("selected_mt5_connection_id", null);
+
   if (syncRequestId) {
     const { error: requestUpdateError } = await supabase
       .from("mt5_sync_requests")

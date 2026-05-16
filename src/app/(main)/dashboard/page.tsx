@@ -2,33 +2,29 @@ import { unstable_noStore as noStore } from "next/cache";
 import Link from "next/link";
 
 import { DisciplineChart } from "@/app/(main)/dashboard/_components/discipline-chart";
+import { Mt5AccountSwitcher } from "@/components/mt5-account-switcher";
 import { TradeOutcomeBadge, TradeReviewBadge, TradeStatusBadge } from "@/components/trade-lifecycle-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { getMt5Connections } from "@/lib/data/mt5";
+import { getMt5AccountContext, type Mt5ConnectionStatus } from "@/lib/data/mt5";
 import { calculateDashboardMetrics, getPrimaryAnalysis, getTrades } from "@/lib/data/trades";
 import { formatTradeDateTime } from "@/lib/format-trade-time";
+import { getMt5ConnectionLabel } from "@/lib/mt5-label";
 import type { TradeWithAnalysis } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
 
 function getFilteredTrades({
-  account,
-  broker,
+  selectedConnectionId,
   trades,
 }: {
-  account?: string;
-  broker?: string;
+  selectedConnectionId: string | null;
   trades: TradeWithAnalysis[];
 }) {
   return trades.filter((trade) => {
-    if (account && trade.mt5_connection_id !== account) {
-      return false;
-    }
-
-    if (broker && trade.mt5_broker !== broker) {
+    if (selectedConnectionId && trade.mt5_connection_id !== selectedConnectionId) {
       return false;
     }
 
@@ -36,38 +32,16 @@ function getFilteredTrades({
   });
 }
 
-function getConnectionFilterLabel(connection: Awaited<ReturnType<typeof getMt5Connections>>[number]) {
-  if (connection.broker && connection.account_number) {
-    return `${connection.broker} (${connection.account_number})`;
-  }
-
-  if (connection.account_number) {
-    return `MT5 Account (${connection.account_number})`;
-  }
-
-  return "Pending MT5 account";
-}
-
-export default async function Page({ searchParams }: { searchParams: Promise<{ account?: string; broker?: string }> }) {
+export default async function Page() {
   noStore();
 
-  const [allTrades, connections] = await Promise.all([getTrades(), getMt5Connections()]);
-  const { account, broker } = await searchParams;
+  const [allTrades, accountContext] = await Promise.all([getTrades(), getMt5AccountContext()]);
+  const { connections, selectedConnection, selectedConnectionId } = accountContext;
   const trades = getFilteredTrades({
-    account,
-    broker,
+    selectedConnectionId,
     trades: allTrades,
   });
   const metrics = calculateDashboardMetrics(trades);
-  const brokerCounts = connections.reduce<Map<string, number>>((counts, connection) => {
-    if (!connection.broker) {
-      return counts;
-    }
-
-    counts.set(connection.broker, (counts.get(connection.broker) ?? 0) + 1);
-    return counts;
-  }, new Map());
-  const brokerOptions = [...brokerCounts.entries()].filter(([, count]) => count > 1).map(([broker]) => broker);
   const chartData = trades
     .slice(0, 7)
     .reverse()
@@ -83,12 +57,15 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ a
           <div className="text-muted-foreground text-sm">Qyvex Edge</div>
           <h1 className="font-semibold text-4xl tracking-tight">Discipline dashboard</h1>
           <p className="max-w-2xl text-muted-foreground text-sm">
-            Track execution quality, rule adherence, and recent journal activity.
+            Track execution quality, rule adherence, and recent journal activity for the active account.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/upload">Log trade</Link>
-        </Button>
+        <div className="flex flex-col gap-3 sm:items-end">
+          <Mt5AccountSwitcher connections={connections} selectedConnectionId={selectedConnectionId} />
+          <Button asChild>
+            <Link href="/dashboard/upload">Log trade</Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -99,22 +76,20 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ a
 
       <Card>
         <CardHeader>
-          <CardTitle>Account filters</CardTitle>
+          <CardTitle>Account context</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button asChild size="sm" variant={!account && !broker ? "default" : "outline"}>
-            <Link href="/dashboard">All accounts</Link>
-          </Button>
-          {connections.map((connection) => (
-            <Button key={connection.id} asChild size="sm" variant={account === connection.id ? "default" : "outline"}>
-              <Link href={`/dashboard?account=${connection.id}`}>{getConnectionFilterLabel(connection)}</Link>
-            </Button>
-          ))}
-          {brokerOptions.map((option) => (
-            <Button key={option} asChild size="sm" variant={broker === option ? "default" : "outline"}>
-              <Link href={`/dashboard?broker=${encodeURIComponent(option)}`}>{option}</Link>
-            </Button>
-          ))}
+        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="font-medium">
+              {selectedConnection ? getMt5ConnectionLabel(selectedConnection) : "No MT5 account selected"}
+            </div>
+            <div className="text-muted-foreground text-sm">
+              {selectedConnection
+                ? `${metrics.totalTrades} trades in this account view`
+                : "Connect MT5 or log trades to start building an account view."}
+            </div>
+          </div>
+          <AccountSyncSummary connection={selectedConnection} />
         </CardContent>
       </Card>
 
@@ -241,6 +216,26 @@ function FeedbackBlock({ label, items }: { label: string; items: string[] }) {
             {item}
           </Badge>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function AccountSyncSummary({ connection }: { connection: Mt5ConnectionStatus | null }) {
+  if (!connection) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-2xl border bg-secondary/50 px-4 py-3 text-sm">
+      <div className="text-muted-foreground">Last sync</div>
+      <div className="font-medium">
+        {connection.last_sync_at
+          ? new Intl.DateTimeFormat("en", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            }).format(new Date(connection.last_sync_at))
+          : "Waiting for first sync"}
       </div>
     </div>
   );

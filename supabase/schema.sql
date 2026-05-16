@@ -14,6 +14,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
   full_name text,
+  selected_mt5_connection_id uuid,
   timezone text not null default 'UTC',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -140,6 +141,13 @@ alter table public.trades
   add constraint trades_mt5_connection_id_fkey
   foreign key (mt5_connection_id) references public.mt5_connections(id) on delete set null;
 
+alter table public.profiles
+  drop constraint if exists profiles_selected_mt5_connection_id_fkey;
+
+alter table public.profiles
+  add constraint profiles_selected_mt5_connection_id_fkey
+  foreign key (selected_mt5_connection_id) references public.mt5_connections(id) on delete set null;
+
 create index if not exists profiles_email_idx on public.profiles(email);
 create index if not exists trading_rules_user_id_idx on public.trading_rules(user_id);
 create index if not exists trades_user_created_idx on public.trades(user_id, created_at desc);
@@ -154,6 +162,7 @@ create index if not exists trades_user_mt5_connection_idx on public.trades(user_
 create unique index if not exists trades_user_mt5_connection_ticket_unique on public.trades(user_id, mt5_connection_id, mt5_ticket) where mt5_connection_id is not null and mt5_ticket is not null;
 create index if not exists ai_analysis_user_created_idx on public.ai_analysis(user_id, created_at desc);
 create index if not exists ai_analysis_trade_id_idx on public.ai_analysis(trade_id);
+create index if not exists profiles_selected_mt5_connection_idx on public.profiles(selected_mt5_connection_id) where selected_mt5_connection_id is not null;
 create index if not exists mt5_connections_user_id_idx on public.mt5_connections(user_id);
 create index if not exists mt5_connections_user_active_idx on public.mt5_connections(user_id, is_active);
 create index if not exists mt5_connections_user_broker_idx on public.mt5_connections(user_id, broker);

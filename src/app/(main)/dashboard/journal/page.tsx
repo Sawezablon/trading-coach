@@ -2,12 +2,15 @@ import { unstable_noStore as noStore } from "next/cache";
 import Link from "next/link";
 
 import { DeleteTradeButton } from "@/app/(main)/dashboard/trades/_components/delete-trade-button";
+import { Mt5AccountSwitcher } from "@/components/mt5-account-switcher";
 import { TradeOutcomeBadge, TradeReviewBadge, TradeStatusBadge } from "@/components/trade-lifecycle-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getMt5AccountContext } from "@/lib/data/mt5";
 import { getTrades } from "@/lib/data/trades";
 import { formatTradeDateTime } from "@/lib/format-trade-time";
+import { getMt5ConnectionLabel } from "@/lib/mt5-label";
 
 const filters = [
   { label: "All", value: "all" },
@@ -43,10 +46,14 @@ function filterTrades(trades: Awaited<ReturnType<typeof getTrades>>, filter: str
 export default async function JournalPage({ searchParams }: { searchParams: Promise<{ filter?: string }> }) {
   noStore();
 
-  const trades = await getTrades();
+  const [trades, accountContext] = await Promise.all([getTrades(), getMt5AccountContext()]);
+  const { connections, selectedConnection, selectedConnectionId } = accountContext;
   const { filter = "all" } = await searchParams;
   const currentFilter = filters.find((item) => item.value === filter) ?? filters[0];
-  const visibleTrades = filterTrades(trades, filter);
+  const accountTrades = selectedConnectionId
+    ? trades.filter((trade) => trade.mt5_connection_id === selectedConnectionId)
+    : trades;
+  const visibleTrades = filterTrades(accountTrades, filter);
 
   return (
     <div className="flex flex-col gap-6">
@@ -55,18 +62,26 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
           <div className="text-muted-foreground text-sm">Journal</div>
           <h1 className="font-semibold text-4xl tracking-tight">Trade journal</h1>
           <p className="max-w-2xl text-muted-foreground text-sm">
-            Review trades, notes, emotions, and AI discipline feedback.
+            Review trades, notes, emotions, and AI discipline feedback for the active account.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/upload">Log trade</Link>
-        </Button>
+        <div className="flex flex-col gap-3 sm:items-end">
+          <Mt5AccountSwitcher connections={connections} selectedConnectionId={selectedConnectionId} />
+          <Button asChild>
+            <Link href="/dashboard/upload">Log trade</Link>
+          </Button>
+        </div>
       </div>
 
       <Card>
         <CardHeader className="space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle>{currentFilter.label}</CardTitle>
+            <div>
+              <CardTitle>{currentFilter.label}</CardTitle>
+              <p className="mt-1 text-muted-foreground text-sm">
+                {selectedConnection ? getMt5ConnectionLabel(selectedConnection) : "All journal trades"}
+              </p>
+            </div>
             <Badge variant="outline">{visibleTrades.length} shown</Badge>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -131,12 +146,12 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
           ) : (
             <div className="rounded-2xl border border-dashed p-8 text-center">
               <div className="font-medium">
-                {trades.length ? "No trades match this filter" : "No trades logged yet"}
+                {accountTrades.length ? "No trades match this filter" : "No trades logged for this account yet"}
               </div>
               <p className="mt-2 text-muted-foreground text-sm">
-                {trades.length
+                {accountTrades.length
                   ? "Try a different journal view or complete more trade reviews."
-                  : "Your journal will appear here after your first entry."}
+                  : "Trades for the active account will appear here after sync or manual logging."}
               </p>
             </div>
           )}

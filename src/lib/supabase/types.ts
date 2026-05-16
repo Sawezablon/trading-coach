@@ -133,6 +133,7 @@ export type Database = {
           id: string;
           email: string | null;
           full_name: string | null;
+          selected_mt5_connection_id: string | null;
           timezone: string;
           created_at: string;
           updated_at: string;
@@ -141,11 +142,13 @@ export type Database = {
           id: string;
           email?: string | null;
           full_name?: string | null;
+          selected_mt5_connection_id?: string | null;
           timezone?: string;
         };
         Update: {
           email?: string | null;
           full_name?: string | null;
+          selected_mt5_connection_id?: string | null;
           timezone?: string;
         };
         Relationships: [];

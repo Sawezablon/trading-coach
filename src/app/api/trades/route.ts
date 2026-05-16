@@ -16,6 +16,36 @@ async function fileToDataUrl(file: File | null) {
   return `data:${file.type};base64,${buffer.toString("base64")}`;
 }
 
+async function getSelectedConnection(
+  supabase: NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>,
+  userId: string,
+  formData: FormData,
+) {
+  const connectionId = String(formData.get("mt5_connection_id") ?? "").trim();
+
+  if (!connectionId) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("mt5_connections")
+    .select("id, account_number, broker")
+    .eq("id", connectionId)
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Choose a valid active trading account.");
+  }
+
+  return data;
+}
+
 export async function POST(request: Request) {
   const formData = await request.formData();
   const supabase = await createSupabaseServerClient();
@@ -84,6 +114,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let selectedConnection: Awaited<ReturnType<typeof getSelectedConnection>>;
+
+  try {
+    selectedConnection = await getSelectedConnection(supabase, user.id, formData);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Invalid trading account." },
+      { status: 400 },
+    );
+  }
+
   const { data: existingRules, error: rulesError } = await supabase
     .from("trading_rules")
     .select("*")
@@ -120,12 +161,16 @@ export async function POST(request: Request) {
   startOfDay.setHours(0, 0, 0, 0);
   const endOfDay = new Date(startOfDay);
   endOfDay.setDate(endOfDay.getDate() + 1);
-  const { count: tradesToday } = await supabase
+  let tradesTodayQuery = supabase
     .from("trades")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id)
     .gte("trade_taken_at", submittedDayStart ?? startOfDay.toISOString())
     .lt("trade_taken_at", submittedDayEnd ?? endOfDay.toISOString());
+  tradesTodayQuery = selectedConnection
+    ? tradesTodayQuery.eq("mt5_connection_id", selectedConnection.id)
+    : tradesTodayQuery.is("mt5_connection_id", null);
+  const { count: tradesToday } = await tradesTodayQuery;
 
   const rules = rulesData as RuleSettings;
   const checklist = evaluateTradeChecklist(
@@ -162,6 +207,9 @@ export async function POST(request: Request) {
     .insert({
       user_id: user.id,
       ...tradeInput,
+      mt5_connection_id: selectedConnection?.id ?? null,
+      mt5_account: selectedConnection?.account_number ?? null,
+      mt5_broker: selectedConnection?.broker ?? null,
       screenshot_url: screenshotUrl,
       checklist_results: checklist.items,
       passed_rules: checklist.passedRules,

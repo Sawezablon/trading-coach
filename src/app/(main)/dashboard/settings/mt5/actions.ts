@@ -117,8 +117,16 @@ export async function disconnectMt5ConnectionAction(
     .eq("id", connectionId)
     .eq("user_id", user.id);
 
+  await supabase
+    .from("profiles")
+    .update({ selected_mt5_connection_id: null })
+    .eq("id", user.id)
+    .eq("selected_mt5_connection_id", connectionId);
+
   revalidatePath("/dashboard/settings/mt5");
   revalidatePath("/dashboard");
+  revalidatePath("/dashboard/journal");
+  revalidatePath("/dashboard/upload");
 
   if (error) {
     return { error: error.message, connectionId };
