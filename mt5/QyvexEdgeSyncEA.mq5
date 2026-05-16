@@ -4,7 +4,7 @@
 //| This EA does not place, modify, or close trades.                  |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "1.04"
+#property version   "1.05"
 #property description "Read-only Qyvex Edge trade sync EA."
 
 input string QyvexApiKey = "";
@@ -349,6 +349,33 @@ bool FindEntryDeal(ulong positionId, datetime &openTime, double &entryPrice, str
    return found;
 }
 
+void FindPositionProtectionLevels(ulong positionId, double &stopLoss, double &takeProfit)
+{
+   int total = HistoryOrdersTotal();
+
+   for(int index = 0; index < total; index++)
+   {
+      ulong orderTicket = HistoryOrderGetTicket(index);
+
+      if(orderTicket == 0)
+         continue;
+
+      ulong orderPositionId = (ulong)HistoryOrderGetInteger(orderTicket, ORDER_POSITION_ID);
+
+      if(orderPositionId != positionId)
+         continue;
+
+      double orderStopLoss = HistoryOrderGetDouble(orderTicket, ORDER_SL);
+      double orderTakeProfit = HistoryOrderGetDouble(orderTicket, ORDER_TP);
+
+      if(orderStopLoss > 0.0)
+         stopLoss = orderStopLoss;
+
+      if(orderTakeProfit > 0.0)
+         takeProfit = orderTakeProfit;
+   }
+}
+
 datetime ClosedHistoryFrom()
 {
    datetime now = TimeCurrent();
@@ -398,6 +425,8 @@ int CollectClosedDeals(string &items)
       double entryPrice = 0.0;
       string direction = "";
       double lotSize = HistoryDealGetDouble(dealTicket, DEAL_VOLUME);
+      double stopLoss = 0.0;
+      double takeProfit = 0.0;
 
       if(!FindEntryDeal(positionId, openTime, entryPrice, direction, lotSize))
       {
@@ -405,14 +434,16 @@ int CollectClosedDeals(string &items)
          openTime = closeTime;
       }
 
+      FindPositionProtectionLevels(positionId, stopLoss, takeProfit);
+
       string tradeJson = BuildTradeJson(
          IntegerToString((long)positionId),
          HistoryDealGetString(dealTicket, DEAL_SYMBOL),
          direction,
          lotSize,
          entryPrice,
-         0.0,
-         0.0,
+         stopLoss,
+         takeProfit,
          openTime,
          closeTime,
          HistoryDealGetDouble(dealTicket, DEAL_PRICE),

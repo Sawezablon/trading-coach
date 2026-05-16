@@ -169,6 +169,31 @@ function calculateEstimatedRisk({
   };
 }
 
+function calculatePlannedRr({
+  direction,
+  entryPrice,
+  stopLoss,
+  takeProfit,
+}: {
+  direction: TradeDirection;
+  entryPrice: number | null;
+  stopLoss: number | null;
+  takeProfit: number | null;
+}) {
+  if (!entryPrice || !stopLoss || !takeProfit) {
+    return 0;
+  }
+
+  const risk = direction === "short" ? stopLoss - entryPrice : entryPrice - stopLoss;
+  const reward = direction === "short" ? entryPrice - takeProfit : takeProfit - entryPrice;
+
+  if (risk <= 0 || reward <= 0) {
+    return 0;
+  }
+
+  return Number((reward / risk).toFixed(2));
+}
+
 function mapMt5Trade({
   accountNumber,
   broker,
@@ -214,6 +239,12 @@ function mapMt5Trade({
   const status = normalizeStatus(rawTrade.status, closedAt);
   const profit = numberValue(rawTrade.profit);
   const accountCurrency = optionalString(rawTrade.accountCurrency);
+  const plannedRr = calculatePlannedRr({
+    direction,
+    entryPrice,
+    stopLoss,
+    takeProfit,
+  });
   const systemAnalysis = evaluateSystemTradeReview(
     {
       account_balance_at_sync: accountBalance,
@@ -243,7 +274,7 @@ function mapMt5Trade({
     take_profit: takeProfit,
     lot_size: lotSize,
     risk_percent: estimatedRisk.percent ?? 0,
-    rr: 0,
+    rr: plannedRr,
     session: "MT5",
     emotions: "unreviewed",
     notes: optionalString(rawTrade.comment) ?? "Synced from MetaTrader 5. Complete the journal review.",
@@ -320,6 +351,7 @@ function getMt5FactUpdate(
     estimated_risk_percent: tradeInput.estimated_risk_percent,
     risk_calculation_method: tradeInput.risk_calculation_method,
     risk_percent: tradeInput.risk_percent,
+    rr: tradeInput.rr,
     mt5_account: tradeInput.mt5_account,
     mt5_broker: tradeInput.mt5_broker,
     mt5_connection_id: tradeInput.mt5_connection_id,

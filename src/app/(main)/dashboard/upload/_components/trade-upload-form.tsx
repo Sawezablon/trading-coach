@@ -373,6 +373,7 @@ export function TradeUploadForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="MT5">MT5 sync</SelectItem>
                   <SelectItem value="Asia">Asia</SelectItem>
                   <SelectItem value="London">London</SelectItem>
                   <SelectItem value="New York">New York</SelectItem>
