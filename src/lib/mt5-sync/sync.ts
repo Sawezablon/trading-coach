@@ -197,13 +197,23 @@ function calculatePlannedRr({
 function calculateProfitLossPercent({
   accountBalance,
   profit,
+  rawPercent,
   status,
 }: {
   accountBalance: number | null;
   profit: number | null;
+  rawPercent: number | null;
   status: TradeStatus;
 }) {
-  if (status !== "closed" || profit === null || !accountBalance || accountBalance <= 0) {
+  if (status !== "closed") {
+    return null;
+  }
+
+  if (rawPercent !== null) {
+    return Number(rawPercent.toFixed(2));
+  }
+
+  if (profit === null || !accountBalance || accountBalance <= 0) {
     return null;
   }
 
@@ -211,19 +221,42 @@ function calculateProfitLossPercent({
 }
 
 function calculateFinalRr({
+  closePrice,
+  direction,
+  entryPrice,
   estimatedRiskAmount,
   profit,
   status,
+  stopLoss,
 }: {
+  closePrice: number | null;
+  direction: TradeDirection;
+  entryPrice: number | null;
   estimatedRiskAmount: number | null;
   profit: number | null;
   status: TradeStatus;
+  stopLoss: number | null;
 }) {
-  if (status !== "closed" || profit === null || !estimatedRiskAmount || estimatedRiskAmount <= 0) {
+  if (status !== "closed") {
     return null;
   }
 
-  return Number((profit / estimatedRiskAmount).toFixed(2));
+  if (profit !== null && estimatedRiskAmount && estimatedRiskAmount > 0) {
+    return Number((profit / estimatedRiskAmount).toFixed(2));
+  }
+
+  if (!entryPrice || !stopLoss || !closePrice) {
+    return null;
+  }
+
+  const risk = direction === "short" ? stopLoss - entryPrice : entryPrice - stopLoss;
+  const result = direction === "short" ? entryPrice - closePrice : closePrice - entryPrice;
+
+  if (risk <= 0) {
+    return null;
+  }
+
+  return Number((result / risk).toFixed(2));
 }
 
 function inferTradingSession(isoDate: string) {
@@ -266,9 +299,10 @@ function mapMt5Trade({
   const stopLoss = positiveNumberValue(rawTrade.stopLoss);
   const takeProfit = positiveNumberValue(rawTrade.takeProfit);
   const lotSize = numberValue(rawTrade.lotSize ?? rawTrade.volume);
-  const accountBalance = positiveNumberValue(rawTrade.accountBalance);
-  const tickValue = positiveNumberValue(rawTrade.tickValue);
-  const tickSize = positiveNumberValue(rawTrade.tickSize);
+  const accountBalance = positiveNumberValue(rawTrade.accountBalance ?? rawTrade.balance ?? rawTrade.account_balance);
+  const tickValue = positiveNumberValue(rawTrade.tickValue ?? rawTrade.symbolTickValue);
+  const tickSize = positiveNumberValue(rawTrade.tickSize ?? rawTrade.symbolTickSize);
+  const closePrice = positiveNumberValue(rawTrade.closePrice);
   const estimatedRisk = calculateEstimatedRisk({
     accountBalance,
     entryPrice,
@@ -288,12 +322,17 @@ function mapMt5Trade({
   const profitLossPercent = calculateProfitLossPercent({
     accountBalance,
     profit,
+    rawPercent: numberValue(rawTrade.profitPercent ?? rawTrade.profit_loss_percent ?? rawTrade.change),
     status,
   });
   const finalRr = calculateFinalRr({
+    closePrice,
+    direction,
+    entryPrice,
     estimatedRiskAmount: estimatedRisk.amount,
     profit,
     status,
+    stopLoss,
   });
   const plannedRr = calculatePlannedRr({
     direction,
@@ -340,7 +379,7 @@ function mapMt5Trade({
     trade_taken_at: tradeTakenAt,
     trade_timezone: "UTC",
     closed_at: status === "closed" ? closedAt : null,
-    close_price: status === "closed" ? positiveNumberValue(rawTrade.closePrice) : null,
+    close_price: status === "closed" ? closePrice : null,
     profit_loss_percent: profitLossPercent,
     profit_loss_amount: status === "closed" ? profit : null,
     commission: numberValue(rawTrade.commission),
