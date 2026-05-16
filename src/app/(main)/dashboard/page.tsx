@@ -15,6 +15,7 @@ import { getEmotionRisk, parseEmotionValues } from "@/lib/emotions";
 import { formatTradeDateTime } from "@/lib/format-trade-time";
 import { getMt5ConnectionLabel } from "@/lib/mt5-label";
 import type { TradeWithAnalysis } from "@/lib/supabase/types";
+import { getSystemReviewItems, getSystemReviewScore } from "@/lib/system-review";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,30 @@ function getFilteredTrades({
 
 function getTradeDiscipline(trade: TradeWithAnalysis) {
   return trade.discipline_score ?? getPrimaryAnalysis(trade)?.discipline_score ?? 0;
+}
+
+function getTradeIntelligenceScore(trade: TradeWithAnalysis) {
+  const scores: number[] = [];
+  const systemScore = getSystemReviewScore(trade.system_analysis);
+  const checklistScore = trade.checklist_completion_rate ?? 0;
+
+  if (systemScore > 0) {
+    scores.push(systemScore);
+  }
+
+  if (checklistScore > 0) {
+    scores.push(checklistScore);
+  }
+
+  scores.push(trade.review_status === "reviewed" ? 100 : 35);
+
+  const emotionValues = parseEmotionValues(trade.emotions);
+  if (emotionValues.length) {
+    const emotionRisk = getEmotionRisk(trade.emotions);
+    scores.push(emotionRisk === "high-risk" ? 35 : emotionRisk === "warning" ? 70 : 100);
+  }
+
+  return average(scores);
 }
 
 function average(values: number[]) {
@@ -64,6 +89,115 @@ function countBy(items: string[]) {
   )
     .map(([label, count]) => ({ label, count }))
     .sort((left, right) => right.count - left.count);
+}
+
+function getTrendLabel(scores: number[]) {
+  if (scores.length < 4) {
+    return {
+      detail: "More reviewed trades will make the trend clearer.",
+      label: "Building",
+      tone: "neutral" as const,
+    };
+  }
+
+  const midpoint = Math.floor(scores.length / 2);
+  const older = average(scores.slice(0, midpoint));
+  const recent = average(scores.slice(midpoint));
+  const change = recent - older;
+
+  if (change >= 8) {
+    return {
+      detail: `Recent discipline is up ${change} points.`,
+      label: "Improving",
+      tone: "healthy" as const,
+    };
+  }
+
+  if (change <= -8) {
+    return {
+      detail: `Recent discipline is down ${Math.abs(change)} points.`,
+      label: "Declining",
+      tone: "warning" as const,
+    };
+  }
+
+  return {
+    detail: "Recent discipline is broadly stable.",
+    label: "Stable",
+    tone: "neutral" as const,
+  };
+}
+
+function getDisciplineIntelligence({
+  highRiskEmotionTrades,
+  metrics,
+  reviewCompletion,
+  trades,
+}: {
+  highRiskEmotionTrades: TradeWithAnalysis[];
+  metrics: ReturnType<typeof calculateDashboardMetrics>;
+  reviewCompletion: number;
+  trades: TradeWithAnalysis[];
+}) {
+  const emotionReviewedTrades = trades.filter((trade) => parseEmotionValues(trade.emotions).length > 0);
+  const emotionalControl = emotionReviewedTrades.length
+    ? Math.round(((emotionReviewedTrades.length - highRiskEmotionTrades.length) / emotionReviewedTrades.length) * 100)
+    : 0;
+  const systemScore = metrics.averageSystemScore || (metrics.mt5SyncedTrades ? 0 : 100);
+  const userChecklistScore = metrics.avgChecklistCompletion;
+  const intelligenceScore = trades.length
+    ? Math.round(systemScore * 0.35 + userChecklistScore * 0.25 + reviewCompletion * 0.25 + emotionalControl * 0.15)
+    : 0;
+  const leakCandidates = [
+    {
+      action: metrics.needsReviewTrades
+        ? `Review ${metrics.needsReviewTrades} imported trade${metrics.needsReviewTrades === 1 ? "" : "s"}`
+        : "Keep imported trades reviewed as they arrive",
+      detail: `${metrics.needsReviewTrades} trade${metrics.needsReviewTrades === 1 ? "" : "s"} waiting for context.`,
+      href: "/dashboard/journal?filter=needs-review",
+      label: "Review debt",
+      score: reviewCompletion,
+    },
+    {
+      action: metrics.systemAlerts
+        ? "Open the latest system alerts and fix the rule source"
+        : "Keep system rules clean and measurable",
+      detail: `${metrics.systemAlerts} automatic alert${metrics.systemAlerts === 1 ? "" : "s"} detected.`,
+      href: "/dashboard/journal",
+      label: "System rules",
+      score: systemScore,
+    },
+    {
+      action: "Complete the user checklist before saving trades",
+      detail: `${metrics.avgChecklistCompletion}% average checklist completion.`,
+      href: "/dashboard/upload",
+      label: "User checklist",
+      score: userChecklistScore,
+    },
+    {
+      action: highRiskEmotionTrades.length
+        ? "Review high-risk emotional entries before the next session"
+        : "Keep tagging emotions before entry",
+      detail: `${highRiskEmotionTrades.length} high-risk emotional trade${highRiskEmotionTrades.length === 1 ? "" : "s"}.`,
+      href: "/dashboard/journal",
+      label: "Emotional control",
+      score: emotionalControl,
+    },
+  ];
+  const primaryLeak = leakCandidates.sort((left, right) => left.score - right.score)[0];
+  const recentScores = trades.slice(0, 8).reverse().map(getTradeIntelligenceScore);
+  const trend = getTrendLabel(recentScores);
+
+  return {
+    emotionalControl,
+    intelligenceScore,
+    primaryLeak,
+    recentScores,
+    reviewCompletion,
+    systemScore,
+    trend,
+    userChecklistScore,
+  };
 }
 
 function getDashboardModel(trades: TradeWithAnalysis[]) {
@@ -97,11 +231,18 @@ function getDashboardModel(trades: TradeWithAnalysis[]) {
       : metrics.avgDiscipline >= 80
         ? "healthy"
         : "neutral";
+  const disciplineIntelligence = getDisciplineIntelligence({
+    highRiskEmotionTrades,
+    metrics,
+    reviewCompletion,
+    trades,
+  });
 
   return {
     behaviorState,
     behaviorTone,
     dominantEmotion,
+    disciplineIntelligence,
     emotionCounts,
     failedRuleCounts,
     highRiskEmotionTrades,
@@ -276,42 +417,75 @@ function DailySnapshotHero({
 }
 
 function DisciplineIntelligence({ model }: { model: ReturnType<typeof getDashboardModel> }) {
-  const { metrics, mostFailedRule, reviewCompletion, ruleAdherence } = model;
+  const { disciplineIntelligence, metrics, mostFailedRule, ruleAdherence } = model;
+  const { emotionalControl, intelligenceScore, primaryLeak, recentScores, systemScore, trend, userChecklistScore } =
+    disciplineIntelligence;
 
   return (
     <Card className="border-primary/15 bg-gradient-to-br from-card to-secondary/50 xl:col-span-5">
       <CardHeader>
         <SectionEyebrow icon={<IconMark text="DI" />}>Discipline Intelligence</SectionEyebrow>
-        <CardTitle>How closely did you follow your plan?</CardTitle>
-        <CardDescription>Qyvex prioritizes rule behavior before profit.</CardDescription>
+        <CardTitle>What is really weakening execution?</CardTitle>
+        <CardDescription>System checks, review habits, psychology, and checklist behavior in one view.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        <ScoreRing label="Discipline score" value={metrics.avgDiscipline} />
+        <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+          <ScoreRing label="Intelligence score" value={intelligenceScore} />
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-primary/20 bg-primary/10 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-muted-foreground text-xs">Primary discipline leak</div>
+                <Badge
+                  className={primaryLeak.score < 65 ? "bg-[#F59E0B]/10 text-[#F59E0B]" : "bg-primary/10 text-primary"}
+                >
+                  {primaryLeak.score}%
+                </Badge>
+              </div>
+              <div className="mt-2 font-semibold text-lg">{primaryLeak.label}</div>
+              <p className="mt-1 text-muted-foreground text-sm">{primaryLeak.detail}</p>
+              <Button asChild size="sm" className="mt-3">
+                <Link href={primaryLeak.href}>{primaryLeak.action}</Link>
+              </Button>
+            </div>
+            <div className="rounded-2xl border bg-secondary/35 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-muted-foreground text-xs">Recent trajectory</div>
+                  <div className="mt-1 font-medium">{trend.label}</div>
+                </div>
+                <Badge className={getToneClass(trend.tone)}>{trend.label}</Badge>
+              </div>
+              <TrendDots scores={recentScores} />
+              <div className="mt-2 text-muted-foreground text-xs">{trend.detail}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-3">
+          <BreakdownRow label="System rules" value={systemScore} detail={`${metrics.systemAlerts} alerts`} />
+          <BreakdownRow
+            label="User checklist"
+            value={userChecklistScore}
+            detail={`${metrics.avgChecklistCompletion}% completion`}
+          />
+          <BreakdownRow
+            label="Review discipline"
+            value={disciplineIntelligence.reviewCompletion}
+            detail={`${metrics.needsReviewTrades} waiting`}
+          />
+          <BreakdownRow
+            label="Emotional control"
+            value={emotionalControl}
+            detail={`${model.highRiskEmotionTrades.length} high-risk`}
+          />
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-2">
-          <IntelligenceTile
-            label="Rule adherence"
-            value={`${ruleAdherence}%`}
-            detail="Lower violations means cleaner execution."
-          />
-          <IntelligenceTile
-            label="Checklist completion"
-            value={`${metrics.avgChecklistCompletion}%`}
-            detail="Pre-trade plan coverage."
-          />
-          <IntelligenceTile
-            label="Review completion"
-            value={`${reviewCompletion}%`}
-            detail={`${metrics.needsReviewTrades} waiting.`}
-          />
-          <IntelligenceTile
-            label="System score"
-            value={`${metrics.averageSystemScore}%`}
-            detail="Automatic MT5 fact review."
-          />
+          <IntelligenceTile label="Rule adherence" value={`${ruleAdherence}%`} detail="All rule-break trades." />
           <IntelligenceTile
             label="Most failed rule"
             value={truncateText(mostFailedRule, 28)}
-            detail="Primary improvement target."
+            detail="Current improvement target."
           />
         </div>
       </CardContent>
@@ -610,6 +784,46 @@ function IntelligenceTile({ detail, label, value }: { detail: string; label: str
       <div className="text-muted-foreground text-xs">{label}</div>
       <div className="mt-1 font-semibold text-lg">{value}</div>
       <div className="mt-2 text-muted-foreground text-xs">{detail}</div>
+    </div>
+  );
+}
+
+function BreakdownRow({ detail, label, value }: { detail: string; label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border bg-secondary/35 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="font-medium text-sm">{label}</div>
+          <div className="text-muted-foreground text-xs">{detail}</div>
+        </div>
+        <div className="font-semibold">{value}%</div>
+      </div>
+      <Progress value={value} className="mt-3" />
+    </div>
+  );
+}
+
+function TrendDots({ scores }: { scores: number[] }) {
+  if (!scores.length) {
+    return <div className="mt-3 text-muted-foreground text-xs">No trade scores yet.</div>;
+  }
+
+  return (
+    <div className="mt-3 flex items-end gap-1.5">
+      {scores.map((score, index) => (
+        <div
+          key={`${score}-${index}`}
+          className={
+            score >= 80
+              ? "h-8 flex-1 rounded-full bg-[#22C55E]/80"
+              : score >= 60
+                ? "h-8 flex-1 rounded-full bg-primary/80"
+                : "h-8 flex-1 rounded-full bg-[#F59E0B]/80"
+          }
+          style={{ opacity: Math.max(0.35, score / 100) }}
+          title={`${score}%`}
+        />
+      ))}
     </div>
   );
 }
