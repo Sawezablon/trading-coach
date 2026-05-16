@@ -18,7 +18,14 @@ import { Textarea } from "@/components/ui/textarea";
 import type { Mt5ConnectionStatus } from "@/lib/data/mt5";
 import { emotionOptions, parseEmotionValues } from "@/lib/emotions";
 import { getMt5ConnectionLabel } from "@/lib/mt5-label";
-import type { RuleSettings, Trade, TradeDirection, TradeResult, TradeStatus } from "@/lib/supabase/types";
+import type {
+  ChecklistItemResult,
+  RuleSettings,
+  Trade,
+  TradeDirection,
+  TradeResult,
+  TradeStatus,
+} from "@/lib/supabase/types";
 import { evaluateTradeChecklist } from "@/lib/trade-rules";
 
 type TradeResponse = {
@@ -57,6 +64,12 @@ function manualIdsFromTrade(trade: Trade | undefined) {
 
 function optionalDateTimeValue(value: string | null | undefined) {
   return value ? toDatetimeLocalValue(new Date(value)) : "";
+}
+
+function getCompletionRate(items: ChecklistItemResult[]) {
+  return items.length
+    ? Math.round((items.filter((item) => item.status === "passed").length / items.length) * 100)
+    : 100;
 }
 
 export function TradeUploadForm({
@@ -113,6 +126,10 @@ export function TradeUploadForm({
     rules,
   );
   const hasRequiredFailures = checklist.requiredFailures.length > 0;
+  const systemItems = checklist.items.filter((rule) => rule.type === "auto");
+  const userItems = checklist.items.filter((rule) => rule.type === "manual");
+  const systemCompletion = getCompletionRate(systemItems);
+  const userCompletion = getCompletionRate(userItems);
 
   useEffect(() => {
     if (!file) {
@@ -576,50 +593,26 @@ export function TradeUploadForm({
               This trade violates your rules.
             </div>
           ) : null}
-          <div className="space-y-2.5">
-            {checklist.items.map((rule) => (
-              <div
-                key={rule.id}
-                className={
-                  rule.status === "passed"
-                    ? "flex items-start gap-3 rounded-2xl border border-[#22C55E]/20 bg-[#22C55E]/10 p-3 text-sm shadow-[0_0_28px_rgb(34_197_94/0.08)] transition-all"
-                    : rule.status === "failed"
-                      ? "flex items-start gap-3 rounded-2xl border border-destructive/25 bg-destructive/10 p-3 text-sm shadow-[0_0_28px_rgb(239_68_68/0.06)] transition-all"
-                      : "flex items-start gap-3 rounded-2xl border border-border/80 bg-secondary/50 p-3 text-sm transition-all"
-                }
-              >
-                {rule.type === "manual" ? (
-                  <Checkbox
-                    checked={manualRuleIds.includes(rule.id)}
-                    onCheckedChange={(checked) => {
-                      setManualRuleIds((current) =>
-                        checked ? [...current, rule.id] : current.filter((id) => id !== rule.id),
-                      );
-                    }}
-                  />
-                ) : (
-                  <span
-                    className={
-                      rule.status === "passed"
-                        ? "mt-0.5 flex size-5 items-center justify-center rounded-full bg-[#22C55E] text-[10px] text-white shadow-[0_0_18px_rgb(34_197_94/0.35)]"
-                        : "mt-0.5 flex size-5 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground shadow-[0_0_18px_rgb(239_68_68/0.25)]"
-                    }
-                  >
-                    {rule.status === "passed" ? "OK" : "!"}
-                  </span>
-                )}
-                <div className="flex-1">
-                  <div className="font-medium">{rule.label}</div>
-                  <div className="text-muted-foreground text-xs capitalize">
-                    {rule.type} - {rule.status}
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div className="space-y-5">
+            <ChecklistSection
+              description="Automatic checks from trade facts."
+              items={systemItems}
+              completionRate={systemCompletion}
+              title="System Checks"
+            />
+
+            <ChecklistSection
+              description="Your personal confirmations."
+              items={userItems}
+              completionRate={userCompletion}
+              manualRuleIds={manualRuleIds}
+              onManualRuleChange={setManualRuleIds}
+              title="User Checklist"
+            />
           </div>
           <div className="rounded-2xl border bg-secondary/50 p-3">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Checklist completion</span>
+              <span className="text-muted-foreground">Overall completion</span>
               <span className="font-semibold">{checklist.completionRate}%</span>
             </div>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
@@ -630,4 +623,122 @@ export function TradeUploadForm({
       </Card>
     </form>
   );
+}
+
+function ChecklistSection({
+  completionRate,
+  description,
+  items,
+  manualRuleIds = [],
+  onManualRuleChange,
+  title,
+}: {
+  completionRate: number;
+  description: string;
+  items: ChecklistItemResult[];
+  manualRuleIds?: string[];
+  onManualRuleChange?: (update: (current: string[]) => string[]) => void;
+  title: string;
+}) {
+  const passedCount = items.filter((rule) => rule.status === "passed").length;
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-semibold text-sm">{title}</div>
+          <div className="text-muted-foreground text-xs">{description}</div>
+        </div>
+        <Badge variant="outline" className="shrink-0 rounded-full">
+          {passedCount}/{items.length}
+        </Badge>
+      </div>
+
+      <div className="space-y-2.5">
+        {items.length ? (
+          items.map((rule) => (
+            <ChecklistRuleRow
+              key={rule.id}
+              manualRuleIds={manualRuleIds}
+              onManualRuleChange={onManualRuleChange}
+              rule={rule}
+            />
+          ))
+        ) : (
+          <div className="rounded-2xl border border-dashed bg-secondary/35 p-3 text-muted-foreground text-sm">
+            No custom rules yet. Add them in Settings.
+          </div>
+        )}
+      </div>
+
+      <CompletionMeter label={`${title} completion`} value={completionRate} />
+    </section>
+  );
+}
+
+function ChecklistRuleRow({
+  manualRuleIds,
+  onManualRuleChange,
+  rule,
+}: {
+  manualRuleIds: string[];
+  onManualRuleChange?: (update: (current: string[]) => string[]) => void;
+  rule: ChecklistItemResult;
+}) {
+  return (
+    <div className={getRuleCardClass(rule.status)}>
+      {rule.type === "manual" ? (
+        <Checkbox
+          checked={manualRuleIds.includes(rule.id)}
+          onCheckedChange={(checked) => {
+            onManualRuleChange?.((current) =>
+              checked ? [...current, rule.id] : current.filter((id) => id !== rule.id),
+            );
+          }}
+        />
+      ) : (
+        <span className={getRuleIconClass(rule.status)}>{rule.status === "passed" ? "OK" : "!"}</span>
+      )}
+      <div className="flex-1">
+        <div className="font-medium">{rule.label}</div>
+        <div className="text-muted-foreground text-xs capitalize">
+          {rule.type} - {rule.status}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompletionMeter({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border bg-secondary/40 p-3">
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-semibold">{value}%</span>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-primary" style={{ width: `${value}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function getRuleCardClass(status: ChecklistItemResult["status"]) {
+  if (status === "passed") {
+    return "flex items-start gap-3 rounded-2xl border border-[#22C55E]/20 bg-[#22C55E]/10 p-3 text-sm shadow-[0_0_28px_rgb(34_197_94/0.08)] transition-all";
+  }
+
+  if (status === "failed") {
+    return "flex items-start gap-3 rounded-2xl border border-destructive/25 bg-destructive/10 p-3 text-sm shadow-[0_0_28px_rgb(239_68_68/0.06)] transition-all";
+  }
+
+  return "flex items-start gap-3 rounded-2xl border border-border/80 bg-secondary/50 p-3 text-sm transition-all";
+}
+
+function getRuleIconClass(status: ChecklistItemResult["status"]) {
+  if (status === "passed") {
+    return "mt-0.5 flex size-5 items-center justify-center rounded-full bg-[#22C55E] text-[10px] text-white shadow-[0_0_18px_rgb(34_197_94/0.35)]";
+  }
+
+  return "mt-0.5 flex size-5 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground shadow-[0_0_18px_rgb(239_68_68/0.25)]";
 }
