@@ -107,7 +107,13 @@ export function evaluateTradeChecklist(trade: TradeRuleInput, rules: RuleSetting
   }
 
   if (rules.confirmation_required) {
-    items.push(item("confirmation", "Confirmation candle closed", trade.confirmation));
+    items.push({
+      id: "confirmation",
+      label: "Confirmation candle closed",
+      required: true,
+      status: manualRuleIds.has("confirmation") ? "passed" : "unchecked",
+      type: "manual",
+    });
   }
 
   if (rules.check_emotional_state) {

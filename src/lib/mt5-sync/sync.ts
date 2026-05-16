@@ -194,6 +194,20 @@ function calculatePlannedRr({
   return Number((reward / risk).toFixed(2));
 }
 
+function inferTradingSession(isoDate: string) {
+  const hour = new Date(isoDate).getUTCHours();
+
+  if (hour >= 0 && hour < 7) {
+    return "Asia";
+  }
+
+  if (hour >= 7 && hour < 13) {
+    return "London";
+  }
+
+  return "New York";
+}
+
 function mapMt5Trade({
   accountNumber,
   broker,
@@ -275,7 +289,7 @@ function mapMt5Trade({
     lot_size: lotSize,
     risk_percent: estimatedRisk.percent ?? 0,
     rr: plannedRr,
-    session: "MT5",
+    session: inferTradingSession(tradeTakenAt),
     emotions: "unreviewed",
     notes: optionalString(rawTrade.comment) ?? "Synced from MetaTrader 5. Complete the journal review.",
     confirmation: false,

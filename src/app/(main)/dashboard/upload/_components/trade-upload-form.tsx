@@ -57,13 +57,33 @@ function sameLocalDate(a: string, b: string) {
 }
 
 function manualIdsFromTrade(trade: Trade | undefined) {
-  return (trade?.checklist_results ?? [])
+  const ids = (trade?.checklist_results ?? [])
     .filter((item) => item.type === "manual" && item.status === "passed")
     .map((item) => item.id);
+
+  if (trade?.confirmation && !ids.includes("confirmation")) {
+    ids.push("confirmation");
+  }
+
+  return ids;
 }
 
 function optionalDateTimeValue(value: string | null | undefined) {
   return value ? toDatetimeLocalValue(new Date(value)) : "";
+}
+
+function inferSessionFromDate(value: string) {
+  const hour = new Date(value).getUTCHours();
+
+  if (hour >= 0 && hour < 7) {
+    return "Asia";
+  }
+
+  if (hour >= 7 && hour < 13) {
+    return "London";
+  }
+
+  return "New York";
 }
 
 function getCompletionRate(items: ChecklistItemResult[]) {
@@ -93,11 +113,15 @@ export function TradeUploadForm({
   );
   const [riskPercent, setRiskPercent] = useState(Number(initialTrade?.risk_percent ?? 0));
   const [rr, setRr] = useState(Number(initialTrade?.rr ?? 0));
-  const [session, setSession] = useState(initialTrade?.session ?? "London");
+  const [session, setSession] = useState(
+    initialTrade?.session === "MT5"
+      ? inferSessionFromDate(initialTrade.trade_taken_at)
+      : (initialTrade?.session ?? "London"),
+  );
   const [selectedEmotions, setSelectedEmotions] = useState<string[]>(() =>
     parseEmotionValues(initialTrade?.emotions ?? ""),
   );
-  const [confirmation, setConfirmation] = useState(initialTrade?.confirmation ?? false);
+  const [confirmation] = useState(initialTrade?.confirmation ?? false);
   const [status, setStatus] = useState<TradeStatus>(initialTrade?.status ?? "open");
   const [outcome, setOutcome] = useState<TradeResult>(initialTrade?.outcome ?? "pending");
   const [closedAt, setClosedAt] = useState(() => optionalDateTimeValue(initialTrade?.closed_at));
@@ -175,6 +199,7 @@ export function TradeUploadForm({
     formData.set("status", status);
     formData.set("outcome", status === "open" ? "pending" : outcome);
     formData.set("manual_rule_ids", manualRuleIds.join(","));
+    formData.set("confirmation", manualRuleIds.includes("confirmation") || confirmation ? "true" : "false");
     formData.set("mt5_connection_id", mt5ConnectionId);
     if (file) {
       formData.set("screenshot", file);
@@ -373,24 +398,11 @@ export function TradeUploadForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="MT5">MT5 sync</SelectItem>
                   <SelectItem value="Asia">Asia</SelectItem>
                   <SelectItem value="London">London</SelectItem>
                   <SelectItem value="New York">New York</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="flex items-center gap-2 self-end rounded-lg border p-3">
-              <Checkbox
-                id="confirmation"
-                name="confirmation"
-                checked={confirmation}
-                onCheckedChange={(checked) => setConfirmation(Boolean(checked))}
-              />
-              <Label htmlFor="confirmation" className="text-sm">
-                Confirmation was present
-              </Label>
             </div>
 
             <div className="space-y-3 md:col-span-2">
