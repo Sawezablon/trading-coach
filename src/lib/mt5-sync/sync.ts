@@ -194,6 +194,38 @@ function calculatePlannedRr({
   return Number((reward / risk).toFixed(2));
 }
 
+function calculateProfitLossPercent({
+  accountBalance,
+  profit,
+  status,
+}: {
+  accountBalance: number | null;
+  profit: number | null;
+  status: TradeStatus;
+}) {
+  if (status !== "closed" || profit === null || !accountBalance || accountBalance <= 0) {
+    return null;
+  }
+
+  return Number(((profit / accountBalance) * 100).toFixed(2));
+}
+
+function calculateFinalRr({
+  estimatedRiskAmount,
+  profit,
+  status,
+}: {
+  estimatedRiskAmount: number | null;
+  profit: number | null;
+  status: TradeStatus;
+}) {
+  if (status !== "closed" || profit === null || !estimatedRiskAmount || estimatedRiskAmount <= 0) {
+    return null;
+  }
+
+  return Number((profit / estimatedRiskAmount).toFixed(2));
+}
+
 function inferTradingSession(isoDate: string) {
   const hour = new Date(isoDate).getUTCHours();
 
@@ -253,6 +285,16 @@ function mapMt5Trade({
   const status = normalizeStatus(rawTrade.status, closedAt);
   const profit = numberValue(rawTrade.profit);
   const accountCurrency = optionalString(rawTrade.accountCurrency);
+  const profitLossPercent = calculateProfitLossPercent({
+    accountBalance,
+    profit,
+    status,
+  });
+  const finalRr = calculateFinalRr({
+    estimatedRiskAmount: estimatedRisk.amount,
+    profit,
+    status,
+  });
   const plannedRr = calculatePlannedRr({
     direction,
     entryPrice,
@@ -299,7 +341,7 @@ function mapMt5Trade({
     trade_timezone: "UTC",
     closed_at: status === "closed" ? closedAt : null,
     close_price: status === "closed" ? positiveNumberValue(rawTrade.closePrice) : null,
-    profit_loss_percent: null,
+    profit_loss_percent: profitLossPercent,
     profit_loss_amount: status === "closed" ? profit : null,
     commission: numberValue(rawTrade.commission),
     swap: numberValue(rawTrade.swap),
@@ -314,7 +356,7 @@ function mapMt5Trade({
     estimated_risk_amount: estimatedRisk.amount,
     estimated_risk_percent: estimatedRisk.percent,
     risk_calculation_method: estimatedRisk.method,
-    final_rr: null,
+    final_rr: finalRr,
     closing_notes: status === "closed" ? optionalString(rawTrade.closeComment) : null,
     review_status: "needs_review",
     review_completed_at: null,
@@ -350,6 +392,7 @@ function getMt5FactUpdate(
     trade_taken_at: tradeInput.trade_taken_at,
     closed_at: tradeInput.closed_at,
     close_price: tradeInput.close_price,
+    profit_loss_percent: tradeInput.profit_loss_percent,
     profit_loss_amount: tradeInput.profit_loss_amount,
     commission: tradeInput.commission,
     swap: tradeInput.swap,
@@ -366,6 +409,7 @@ function getMt5FactUpdate(
     risk_calculation_method: tradeInput.risk_calculation_method,
     risk_percent: tradeInput.risk_percent,
     rr: tradeInput.rr,
+    final_rr: tradeInput.final_rr,
     mt5_account: tradeInput.mt5_account,
     mt5_broker: tradeInput.mt5_broker,
     mt5_connection_id: tradeInput.mt5_connection_id,
