@@ -227,6 +227,102 @@ function mt5CloseFactsChanged(
   );
 }
 
+async function deactivateDuplicateConnections({
+  accountNumber,
+  broker,
+  connectionId,
+  supabase,
+  userId,
+}: {
+  accountNumber: string;
+  broker: string | null;
+  connectionId: string;
+  supabase: AppSupabaseClient;
+  userId: string;
+}) {
+  let duplicateQuery = supabase
+    .from("mt5_connections")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("account_number", accountNumber)
+    .eq("is_active", true)
+    .neq("id", connectionId);
+
+  duplicateQuery = broker ? duplicateQuery.eq("broker", broker) : duplicateQuery.is("broker", null);
+
+  const { data: duplicateConnections, error: duplicateError } = await duplicateQuery;
+
+  if (duplicateError) {
+    return duplicateError.message;
+  }
+
+  const duplicateIds = (duplicateConnections ?? []).map((connection) => connection.id);
+
+  if (!duplicateIds.length) {
+    return null;
+  }
+
+  const { error: requestUpdateError } = await supabase
+    .from("mt5_sync_requests")
+    .update({ mt5_connection_id: connectionId })
+    .in("mt5_connection_id", duplicateIds);
+
+  if (requestUpdateError) {
+    return requestUpdateError.message;
+  }
+
+  const { error: deactivateError } = await supabase
+    .from("mt5_connections")
+    .update({ is_active: false })
+    .in("id", duplicateIds)
+    .eq("user_id", userId);
+
+  return deactivateError?.message ?? null;
+}
+
+async function findExistingMt5Trade({
+  accountNumber,
+  broker,
+  connectionId,
+  mt5Ticket,
+  supabase,
+  userId,
+}: {
+  accountNumber: string;
+  broker: string | null;
+  connectionId: string;
+  mt5Ticket: string;
+  supabase: AppSupabaseClient;
+  userId: string;
+}) {
+  const selection = "id, review_status, status, closed_at, close_price, profit_loss_amount";
+  const { data: connectionTrade, error: connectionTradeError } = await supabase
+    .from("trades")
+    .select(selection)
+    .eq("user_id", userId)
+    .eq("mt5_connection_id", connectionId)
+    .eq("mt5_ticket", mt5Ticket)
+    .maybeSingle();
+
+  if (connectionTradeError || connectionTrade) {
+    return { data: connectionTrade, error: connectionTradeError };
+  }
+
+  let accountTradeQuery = supabase
+    .from("trades")
+    .select(selection)
+    .eq("user_id", userId)
+    .eq("mt5_account", accountNumber)
+    .eq("mt5_ticket", mt5Ticket)
+    .order("last_synced_at", { ascending: false, nullsFirst: false })
+    .limit(1);
+
+  accountTradeQuery = broker ? accountTradeQuery.eq("mt5_broker", broker) : accountTradeQuery.is("mt5_broker", null);
+
+  const { data: accountTrades, error: accountTradeError } = await accountTradeQuery;
+  return { data: accountTrades?.[0] ?? null, error: accountTradeError };
+}
+
 export async function syncMt5Trades(
   supabase: AppSupabaseClient,
   payload: Mt5SyncPayload,
@@ -258,6 +354,18 @@ export async function syncMt5Trades(
 
   if (connectionError || !connection) {
     return { error: "Invalid API key.", status: 401 };
+  }
+
+  const duplicateError = await deactivateDuplicateConnections({
+    accountNumber,
+    broker,
+    connectionId: connection.id,
+    supabase,
+    userId: connection.user_id,
+  });
+
+  if (duplicateError) {
+    return { error: duplicateError, status: 400 };
   }
 
   let created = 0;
@@ -298,13 +406,14 @@ export async function syncMt5Trades(
 
     lastTicket = tradeInput.mt5_ticket;
 
-    const { data: existingTrade, error: existingTradeError } = await supabase
-      .from("trades")
-      .select("id, review_status, status, closed_at, close_price, profit_loss_amount")
-      .eq("user_id", connection.user_id)
-      .eq("mt5_connection_id", connection.id)
-      .eq("mt5_ticket", tradeInput.mt5_ticket)
-      .maybeSingle();
+    const { data: existingTrade, error: existingTradeError } = await findExistingMt5Trade({
+      accountNumber,
+      broker,
+      connectionId: connection.id,
+      mt5Ticket: tradeInput.mt5_ticket,
+      supabase,
+      userId: connection.user_id,
+    });
 
     if (existingTradeError) {
       skip(existingTradeError.message);

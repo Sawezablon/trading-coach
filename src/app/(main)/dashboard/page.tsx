@@ -17,15 +17,11 @@ export const dynamic = "force-dynamic";
 function getFilteredTrades({
   account,
   broker,
-  propFirm,
   trades,
-  propFirmConnectionIds,
 }: {
   account?: string;
   broker?: string;
-  propFirm?: string;
   trades: TradeWithAnalysis[];
-  propFirmConnectionIds: Set<string>;
 }) {
   return trades.filter((trade) => {
     if (account && trade.mt5_connection_id !== account) {
@@ -36,38 +32,42 @@ function getFilteredTrades({
       return false;
     }
 
-    if (propFirm && (!trade.mt5_connection_id || !propFirmConnectionIds.has(trade.mt5_connection_id))) {
-      return false;
-    }
-
     return true;
   });
 }
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: Promise<{ account?: string; broker?: string; propFirm?: string }>;
-}) {
+function getConnectionFilterLabel(connection: Awaited<ReturnType<typeof getMt5Connections>>[number]) {
+  if (connection.broker && connection.account_number) {
+    return `${connection.broker} (${connection.account_number})`;
+  }
+
+  if (connection.account_number) {
+    return `MT5 Account (${connection.account_number})`;
+  }
+
+  return "Pending MT5 account";
+}
+
+export default async function Page({ searchParams }: { searchParams: Promise<{ account?: string; broker?: string }> }) {
   noStore();
 
   const [allTrades, connections] = await Promise.all([getTrades(), getMt5Connections()]);
-  const { account, broker, propFirm } = await searchParams;
-  const propFirmConnectionIds = new Set(
-    connections.filter((connection) => connection.prop_firm === propFirm).map((connection) => connection.id),
-  );
+  const { account, broker } = await searchParams;
   const trades = getFilteredTrades({
     account,
     broker,
-    propFirm,
     trades: allTrades,
-    propFirmConnectionIds,
   });
   const metrics = calculateDashboardMetrics(trades);
-  const brokerOptions = [...new Set(connections.map((connection) => connection.broker).filter(Boolean) as string[])];
-  const propFirmOptions = [
-    ...new Set(connections.map((connection) => connection.prop_firm).filter(Boolean) as string[]),
-  ];
+  const brokerCounts = connections.reduce<Map<string, number>>((counts, connection) => {
+    if (!connection.broker) {
+      return counts;
+    }
+
+    counts.set(connection.broker, (counts.get(connection.broker) ?? 0) + 1);
+    return counts;
+  }, new Map());
+  const brokerOptions = [...brokerCounts.entries()].filter(([, count]) => count > 1).map(([broker]) => broker);
   const chartData = trades
     .slice(0, 7)
     .reverse()
@@ -102,24 +102,17 @@ export default async function Page({
           <CardTitle>Account filters</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Button asChild size="sm" variant={!account && !broker && !propFirm ? "default" : "outline"}>
+          <Button asChild size="sm" variant={!account && !broker ? "default" : "outline"}>
             <Link href="/dashboard">All accounts</Link>
           </Button>
           {connections.map((connection) => (
             <Button key={connection.id} asChild size="sm" variant={account === connection.id ? "default" : "outline"}>
-              <Link href={`/dashboard?account=${connection.id}`}>
-                {connection.account_nickname} {connection.account_number ? `(${connection.account_number})` : ""}
-              </Link>
+              <Link href={`/dashboard?account=${connection.id}`}>{getConnectionFilterLabel(connection)}</Link>
             </Button>
           ))}
           {brokerOptions.map((option) => (
             <Button key={option} asChild size="sm" variant={broker === option ? "default" : "outline"}>
               <Link href={`/dashboard?broker=${encodeURIComponent(option)}`}>{option}</Link>
-            </Button>
-          ))}
-          {propFirmOptions.map((option) => (
-            <Button key={option} asChild size="sm" variant={propFirm === option ? "default" : "outline"}>
-              <Link href={`/dashboard?propFirm=${encodeURIComponent(option)}`}>{option}</Link>
             </Button>
           ))}
         </CardContent>

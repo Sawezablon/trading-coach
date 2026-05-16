@@ -160,6 +160,7 @@ create index if not exists mt5_connections_user_broker_idx on public.mt5_connect
 create index if not exists mt5_connections_user_prop_firm_idx on public.mt5_connections(user_id, prop_firm);
 create index if not exists mt5_connections_api_key_hash_idx on public.mt5_connections(api_key_hash) where is_active = true;
 create unique index if not exists mt5_connections_active_api_key_hash_unique on public.mt5_connections(api_key_hash) where is_active = true;
+create unique index if not exists mt5_connections_active_account_broker_unique on public.mt5_connections(user_id, account_number, broker) where is_active = true and account_number is not null and broker is not null;
 create index if not exists mt5_sync_requests_user_created_idx on public.mt5_sync_requests(user_id, created_at desc);
 create index if not exists mt5_sync_requests_connection_status_idx on public.mt5_sync_requests(mt5_connection_id, status, created_at desc);
 create unique index if not exists mt5_sync_requests_one_pending_per_connection_idx on public.mt5_sync_requests(mt5_connection_id) where mt5_connection_id is not null and status = 'pending';

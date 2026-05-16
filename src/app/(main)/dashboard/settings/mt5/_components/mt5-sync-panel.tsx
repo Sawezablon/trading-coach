@@ -14,7 +14,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import type { Mt5ConnectionStatus, Mt5PendingSyncRequest } from "@/lib/data/mt5";
 
 type Mt5SyncPanelProps = {
@@ -34,6 +33,18 @@ function formatDateTime(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
+function getConnectionName(connection: Mt5ConnectionStatus) {
+  if (connection.broker && connection.account_number) {
+    return `${connection.broker} (${connection.account_number})`;
+  }
+
+  if (connection.account_number) {
+    return `MT5 Account (${connection.account_number})`;
+  }
+
+  return "Pending MT5 account";
+}
+
 export function Mt5SyncPanel({ connections, pendingRequests, syncUrl }: Mt5SyncPanelProps) {
   const [state, formAction, pending] = useActionState<GenerateMt5ApiKeyState, FormData>(generateMt5ApiKeyAction, {});
   const [copied, setCopied] = useState<"key" | "url" | null>(null);
@@ -51,18 +62,12 @@ export function Mt5SyncPanel({ connections, pendingRequests, syncUrl }: Mt5SyncP
       <Card className="xl:col-span-5">
         <CardHeader>
           <CardTitle>New MT5 connection</CardTitle>
-          <CardDescription>Create one API key per broker account or prop firm account.</CardDescription>
+          <CardDescription>
+            Generate one key per MT5 account. Qyvex Edge will read the broker and account number from MT5 after sync.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <form action={formAction} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="account_nickname">Account nickname</Label>
-              <Input id="account_nickname" name="account_nickname" placeholder="FTMO challenge, Pepperstone live..." />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="prop_firm">Broker / prop firm label</Label>
-              <Input id="prop_firm" name="prop_firm" placeholder="FTMO, Exness, FundingPips..." />
-            </div>
+          <form action={formAction}>
             <Button type="submit" disabled={pending}>
               {pending ? "Generating..." : "Generate connection key"}
             </Button>
@@ -111,7 +116,9 @@ export function Mt5SyncPanel({ connections, pendingRequests, syncUrl }: Mt5SyncP
       <Card className="xl:col-span-7">
         <CardHeader>
           <CardTitle>Connected accounts</CardTitle>
-          <CardDescription>Manage each MT5 account independently. Use one EA key per account.</CardDescription>
+          <CardDescription>
+            Active synced MT5 accounts. Disconnected accounts are hidden here and in dashboard filters.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {visibleConnections.length ? (
@@ -150,17 +157,20 @@ function ConnectionCard({
   >(disconnectMt5ConnectionAction, {});
   const hasPendingResync = Boolean(pendingRequest ?? (resyncState.ok && resyncState.connectionId === connection.id));
 
+  if (disconnectState.ok && disconnectState.connectionId === connection.id) {
+    return null;
+  }
+
   const statusLabel = connection.last_sync_at ? "Synced" : connection.is_active ? "Ready" : "Inactive";
   const accountLabel = connection.account_number ?? "Waiting for first sync";
   const brokerLabel = connection.broker ?? "Broker unknown";
-  const propFirmLabel = connection.prop_firm || "No firm label";
 
   return (
     <div className="rounded-2xl border bg-secondary/40 p-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="font-medium">{connection.account_nickname}</div>
+            <div className="font-medium">{getConnectionName(connection)}</div>
             <Badge
               variant="secondary"
               className={connection.is_active ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-muted text-muted-foreground"}
@@ -177,8 +187,6 @@ function ConnectionCard({
             <span>{brokerLabel}</span>
             <span>/</span>
             <span>{accountLabel}</span>
-            <span>/</span>
-            <span>{propFirmLabel}</span>
           </div>
           <div className="text-muted-foreground text-xs">Last sync: {formatDateTime(connection.last_sync_at)}</div>
         </div>

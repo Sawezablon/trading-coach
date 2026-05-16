@@ -33,6 +33,7 @@ export async function getMt5Connections(): Promise<Mt5ConnectionStatus[]> {
     .from("mt5_connections")
     .select("id, account_number, broker, account_nickname, prop_firm, last_sync_at, is_active, created_at, updated_at")
     .eq("user_id", user.id)
+    .eq("is_active", true)
     .order("created_at", { ascending: false });
 
   if (error) {

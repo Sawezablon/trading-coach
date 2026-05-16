@@ -33,7 +33,7 @@ function generateApiKey() {
 
 export async function generateMt5ApiKeyAction(
   _previousState?: GenerateMt5ApiKeyState,
-  formData?: FormData,
+  _formData?: FormData,
 ): Promise<GenerateMt5ApiKeyState> {
   const supabase = await createSupabaseServerClient();
 
@@ -54,8 +54,6 @@ export async function generateMt5ApiKeyAction(
 
   const apiKey = generateApiKey();
   const apiKeyHash = hashMt5ApiKey(apiKey);
-  const accountNickname = String(formData?.get("account_nickname") ?? "").trim() || "MT5 Account";
-  const propFirm = String(formData?.get("prop_firm") ?? "").trim() || null;
 
   const { error: profileError } = await supabase.from("profiles").upsert({
     id: user.id,
@@ -71,14 +69,13 @@ export async function generateMt5ApiKeyAction(
     .insert({
       user_id: user.id,
       api_key_hash: apiKeyHash,
-      account_nickname: accountNickname,
-      prop_firm: propFirm,
       is_active: true,
     })
     .select("id, account_number, broker, account_nickname, prop_firm, last_sync_at, is_active, created_at, updated_at")
     .single();
 
   revalidatePath("/dashboard/settings/mt5");
+  revalidatePath("/dashboard");
 
   if (error || !data) {
     return { error: error?.message ?? "MT5 API key could not be generated." };
@@ -121,6 +118,7 @@ export async function disconnectMt5ConnectionAction(
     .eq("user_id", user.id);
 
   revalidatePath("/dashboard/settings/mt5");
+  revalidatePath("/dashboard");
 
   if (error) {
     return { error: error.message, connectionId };
