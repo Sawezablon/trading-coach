@@ -43,6 +43,7 @@ export type Trade = {
   mt5_ticket: string | null;
   mt5_account: string | null;
   mt5_broker: string | null;
+  mt5_connection_id: string | null;
   synced_from_mt5: boolean;
   last_synced_at: string | null;
   mt5_raw_data: Json | null;
@@ -91,6 +92,8 @@ export type Mt5Connection = {
   api_key_hash: string;
   account_number: string | null;
   broker: string | null;
+  account_nickname: string;
+  prop_firm: string | null;
   last_sync_at: string | null;
   is_active: boolean;
   created_at: string;

@@ -18,6 +18,13 @@ export type RequestMt5HistoryResyncState = {
   ok?: boolean;
   error?: string;
   requestedAt?: string;
+  connectionId?: string;
+};
+
+export type DisconnectMt5ConnectionState = {
+  ok?: boolean;
+  error?: string;
+  connectionId?: string;
 };
 
 function generateApiKey() {
@@ -26,7 +33,7 @@ function generateApiKey() {
 
 export async function generateMt5ApiKeyAction(
   _previousState?: GenerateMt5ApiKeyState,
-  _formData?: FormData,
+  formData?: FormData,
 ): Promise<GenerateMt5ApiKeyState> {
   const supabase = await createSupabaseServerClient();
 
@@ -47,6 +54,8 @@ export async function generateMt5ApiKeyAction(
 
   const apiKey = generateApiKey();
   const apiKeyHash = hashMt5ApiKey(apiKey);
+  const accountNickname = String(formData?.get("account_nickname") ?? "").trim() || "MT5 Account";
+  const propFirm = String(formData?.get("prop_firm") ?? "").trim() || null;
 
   const { error: profileError } = await supabase.from("profiles").upsert({
     id: user.id,
@@ -59,15 +68,14 @@ export async function generateMt5ApiKeyAction(
 
   const { data, error } = await supabase
     .from("mt5_connections")
-    .upsert(
-      {
-        user_id: user.id,
-        api_key_hash: apiKeyHash,
-        is_active: true,
-      },
-      { onConflict: "user_id" },
-    )
-    .select("id, account_number, broker, last_sync_at, is_active, created_at, updated_at")
+    .insert({
+      user_id: user.id,
+      api_key_hash: apiKeyHash,
+      account_nickname: accountNickname,
+      prop_firm: propFirm,
+      is_active: true,
+    })
+    .select("id, account_number, broker, account_nickname, prop_firm, last_sync_at, is_active, created_at, updated_at")
     .single();
 
   revalidatePath("/dashboard/settings/mt5");
@@ -82,7 +90,49 @@ export async function generateMt5ApiKeyAction(
   };
 }
 
-export async function requestMt5HistoryResyncAction(): Promise<RequestMt5HistoryResyncState> {
+export async function disconnectMt5ConnectionAction(
+  _previousState?: DisconnectMt5ConnectionState,
+  formData?: FormData,
+): Promise<DisconnectMt5ConnectionState> {
+  const supabase = await createSupabaseServerClient();
+
+  if (!supabase) {
+    return { error: "Supabase is not configured." };
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be logged in to disconnect an MT5 account." };
+  }
+
+  const connectionId = String(formData?.get("connection_id") ?? "").trim();
+
+  if (!connectionId) {
+    return { error: "Connection id is required." };
+  }
+
+  const { error } = await supabase
+    .from("mt5_connections")
+    .update({ is_active: false })
+    .eq("id", connectionId)
+    .eq("user_id", user.id);
+
+  revalidatePath("/dashboard/settings/mt5");
+
+  if (error) {
+    return { error: error.message, connectionId };
+  }
+
+  return { ok: true, connectionId };
+}
+
+export async function requestMt5HistoryResyncAction(
+  _previousState?: RequestMt5HistoryResyncState,
+  formData?: FormData,
+): Promise<RequestMt5HistoryResyncState> {
   const supabase = await createSupabaseServerClient();
 
   if (!supabase) {
@@ -97,10 +147,17 @@ export async function requestMt5HistoryResyncAction(): Promise<RequestMt5History
     return { error: "You must be logged in to request an MT5 history resync." };
   }
 
+  const connectionId = String(formData?.get("connection_id") ?? "").trim();
+
+  if (!connectionId) {
+    return { error: "Choose an MT5 connection before requesting history." };
+  }
+
   const { data: connection, error: connectionError } = await supabase
     .from("mt5_connections")
     .select("id, account_number")
     .eq("user_id", user.id)
+    .eq("id", connectionId)
     .maybeSingle();
 
   if (connectionError) {
@@ -115,6 +172,7 @@ export async function requestMt5HistoryResyncAction(): Promise<RequestMt5History
     .from("mt5_sync_requests")
     .select("requested_at")
     .eq("user_id", user.id)
+    .eq("mt5_connection_id", connection.id)
     .eq("status", "pending")
     .maybeSingle();
 
@@ -123,7 +181,7 @@ export async function requestMt5HistoryResyncAction(): Promise<RequestMt5History
   }
 
   if (existingRequest) {
-    return { ok: true, requestedAt: existingRequest.requested_at };
+    return { ok: true, requestedAt: existingRequest.requested_at, connectionId: connection.id };
   }
 
   const { data, error } = await supabase
@@ -144,5 +202,5 @@ export async function requestMt5HistoryResyncAction(): Promise<RequestMt5History
     return { error: error?.message ?? "History resync could not be requested." };
   }
 
-  return { ok: true, requestedAt: data.requested_at };
+  return { ok: true, requestedAt: data.requested_at, connectionId: connection.id };
 }

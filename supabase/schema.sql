@@ -76,6 +76,7 @@ create table if not exists public.trades (
   mt5_ticket text,
   mt5_account text,
   mt5_broker text,
+  mt5_connection_id uuid,
   synced_from_mt5 boolean not null default false,
   last_synced_at timestamptz,
   mt5_raw_data jsonb,
@@ -111,11 +112,12 @@ create table if not exists public.mt5_connections (
   api_key_hash text not null,
   account_number text,
   broker text,
+  account_nickname text not null default 'MT5 Account',
+  prop_firm text,
   last_sync_at timestamptz,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint mt5_connections_user_unique unique (user_id)
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.mt5_sync_requests (
@@ -131,6 +133,13 @@ create table if not exists public.mt5_sync_requests (
   updated_at timestamptz not null default now()
 );
 
+alter table public.trades
+  drop constraint if exists trades_mt5_connection_id_fkey;
+
+alter table public.trades
+  add constraint trades_mt5_connection_id_fkey
+  foreign key (mt5_connection_id) references public.mt5_connections(id) on delete set null;
+
 create index if not exists profiles_email_idx on public.profiles(email);
 create index if not exists trading_rules_user_id_idx on public.trading_rules(user_id);
 create index if not exists trades_user_created_idx on public.trades(user_id, created_at desc);
@@ -141,14 +150,19 @@ create index if not exists trades_user_pair_idx on public.trades(user_id, pair);
 create index if not exists trades_user_outcome_idx on public.trades(user_id, outcome);
 create index if not exists trades_user_mt5_ticket_idx on public.trades(user_id, mt5_ticket) where mt5_ticket is not null;
 create index if not exists trades_user_synced_from_mt5_idx on public.trades(user_id, synced_from_mt5);
-create unique index if not exists trades_user_mt5_identity_unique on public.trades(user_id, mt5_account, mt5_ticket) where mt5_account is not null and mt5_ticket is not null;
+create index if not exists trades_user_mt5_connection_idx on public.trades(user_id, mt5_connection_id) where mt5_connection_id is not null;
+create unique index if not exists trades_user_mt5_connection_ticket_unique on public.trades(user_id, mt5_connection_id, mt5_ticket) where mt5_connection_id is not null and mt5_ticket is not null;
 create index if not exists ai_analysis_user_created_idx on public.ai_analysis(user_id, created_at desc);
 create index if not exists ai_analysis_trade_id_idx on public.ai_analysis(trade_id);
 create index if not exists mt5_connections_user_id_idx on public.mt5_connections(user_id);
+create index if not exists mt5_connections_user_active_idx on public.mt5_connections(user_id, is_active);
+create index if not exists mt5_connections_user_broker_idx on public.mt5_connections(user_id, broker);
+create index if not exists mt5_connections_user_prop_firm_idx on public.mt5_connections(user_id, prop_firm);
 create index if not exists mt5_connections_api_key_hash_idx on public.mt5_connections(api_key_hash) where is_active = true;
+create unique index if not exists mt5_connections_active_api_key_hash_unique on public.mt5_connections(api_key_hash) where is_active = true;
 create index if not exists mt5_sync_requests_user_created_idx on public.mt5_sync_requests(user_id, created_at desc);
 create index if not exists mt5_sync_requests_connection_status_idx on public.mt5_sync_requests(mt5_connection_id, status, created_at desc);
-create unique index if not exists mt5_sync_requests_one_pending_per_user_idx on public.mt5_sync_requests(user_id) where status = 'pending';
+create unique index if not exists mt5_sync_requests_one_pending_per_connection_idx on public.mt5_sync_requests(mt5_connection_id) where mt5_connection_id is not null and status = 'pending';
 
 drop trigger if exists set_profiles_updated_at on public.profiles;
 create trigger set_profiles_updated_at

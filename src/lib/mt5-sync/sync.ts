@@ -118,12 +118,14 @@ function getTicket(trade: Mt5TradePayload) {
 function mapMt5Trade({
   accountNumber,
   broker,
+  connectionId,
   rawTrade,
   userId,
   syncedAt,
 }: {
   accountNumber: string;
   broker: string | null;
+  connectionId: string;
   rawTrade: Mt5TradePayload;
   userId: string;
   syncedAt: string;
@@ -177,6 +179,7 @@ function mapMt5Trade({
     mt5_ticket: mt5Ticket,
     mt5_account: accountNumber,
     mt5_broker: broker,
+    mt5_connection_id: connectionId,
     synced_from_mt5: true,
     last_synced_at: syncedAt,
     mt5_raw_data: rawTrade as Json,
@@ -204,6 +207,7 @@ function getMt5FactUpdate(
     swap: tradeInput.swap,
     mt5_account: tradeInput.mt5_account,
     mt5_broker: tradeInput.mt5_broker,
+    mt5_connection_id: tradeInput.mt5_connection_id,
     synced_from_mt5: true,
     last_synced_at: tradeInput.last_synced_at,
     mt5_raw_data: tradeInput.mt5_raw_data,
@@ -281,6 +285,7 @@ export async function syncMt5Trades(
     const tradeInput = mapMt5Trade({
       accountNumber,
       broker,
+      connectionId: connection.id,
       rawTrade: item as Mt5TradePayload,
       userId: connection.user_id,
       syncedAt,
@@ -297,7 +302,7 @@ export async function syncMt5Trades(
       .from("trades")
       .select("id, review_status, status, closed_at, close_price, profit_loss_amount")
       .eq("user_id", connection.user_id)
-      .eq("mt5_account", accountNumber)
+      .eq("mt5_connection_id", connection.id)
       .eq("mt5_ticket", tradeInput.mt5_ticket)
       .maybeSingle();
 
@@ -337,7 +342,7 @@ export async function syncMt5Trades(
         .from("trades")
         .update(getMt5FactUpdate(tradeInput, { review_status: "needs_review", review_completed_at: null }))
         .eq("user_id", connection.user_id)
-        .eq("mt5_account", accountNumber)
+        .eq("mt5_connection_id", connection.id)
         .eq("mt5_ticket", tradeInput.mt5_ticket);
 
       if (retryUpdateError) {

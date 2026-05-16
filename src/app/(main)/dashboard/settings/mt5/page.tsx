@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { APP_CONFIG } from "@/config/app-config";
-import { getMt5Connection, getPendingMt5SyncRequest } from "@/lib/data/mt5";
+import { getMt5Connections, getPendingMt5SyncRequests } from "@/lib/data/mt5";
 import { env } from "@/lib/env";
 
 import { Mt5SyncPanel } from "./_components/mt5-sync-panel";
@@ -39,8 +39,8 @@ const setupSteps = [
 export default async function Mt5SyncSettingsPage() {
   noStore();
 
-  const connection = await getMt5Connection();
-  const pendingRequest = await getPendingMt5SyncRequest();
+  const connections = await getMt5Connections();
+  const pendingRequests = await getPendingMt5SyncRequests();
   const syncUrl = env.mt5SyncUrl;
   const syncDomain = getSyncDomain(syncUrl);
 
@@ -59,7 +59,7 @@ export default async function Mt5SyncSettingsPage() {
         </Button>
       </div>
 
-      <Mt5SyncPanel connection={connection} pendingRequest={pendingRequest} syncUrl={syncUrl} />
+      <Mt5SyncPanel connections={connections} pendingRequests={pendingRequests} syncUrl={syncUrl} />
 
       <Card className="border-[#5EEAD4]/20 bg-[#5EEAD4]/5">
         <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-start">

@@ -91,7 +91,7 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
               return (
                 <div
                   key={trade.id}
-                  className="grid gap-4 rounded-2xl border border-border/80 bg-secondary/40 p-4 transition-colors hover:border-primary/30 hover:bg-card xl:grid-cols-[1.2fr_auto_auto_auto_auto_auto]"
+                  className="grid gap-4 rounded-2xl border border-border/80 bg-secondary/40 p-4 transition-colors hover:border-primary/30 hover:bg-card xl:grid-cols-[1.2fr_auto_auto_auto_auto_auto_auto]"
                 >
                   <div>
                     <div className="font-medium">
@@ -108,6 +108,11 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
                   <TradeStatusBadge status={trade.status} />
                   <TradeOutcomeBadge outcome={trade.outcome} />
                   <TradeReviewBadge status={trade.review_status} />
+                  {trade.synced_from_mt5 ? (
+                    <Badge variant="outline">
+                      {trade.mt5_broker ?? "MT5"} {trade.mt5_account ? `/ ${trade.mt5_account}` : ""}
+                    </Badge>
+                  ) : null}
                   <Badge variant="outline">{trade.discipline_score ?? 0}% discipline</Badge>
                   <div className="flex flex-wrap gap-2">
                     <Button asChild variant="outline" size="sm">

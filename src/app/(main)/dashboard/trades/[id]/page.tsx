@@ -79,6 +79,8 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
             <Info label="Stop loss" value={trade.stop_loss} />
             <Info label="Take profit" value={trade.take_profit} />
             <Info label="Lot size" value={trade.lot_size} />
+            <Info label="MT5 broker" value={trade.mt5_broker} />
+            <Info label="MT5 account" value={trade.mt5_account} />
             <Info label="Risk" value={`${trade.risk_percent}%`} />
             <Info label="Planned RR" value={`${trade.rr}R`} />
             <Info label="Session" value={trade.session} />

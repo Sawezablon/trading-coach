@@ -3,6 +3,8 @@
 import { useActionState, useMemo, useState } from "react";
 
 import {
+  type DisconnectMt5ConnectionState,
+  disconnectMt5ConnectionAction,
   type GenerateMt5ApiKeyState,
   generateMt5ApiKeyAction,
   type RequestMt5HistoryResyncState,
@@ -12,11 +14,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import type { Mt5ConnectionStatus, Mt5PendingSyncRequest } from "@/lib/data/mt5";
 
 type Mt5SyncPanelProps = {
-  connection: Mt5ConnectionStatus | null;
-  pendingRequest: Mt5PendingSyncRequest | null;
+  connections: Mt5ConnectionStatus[];
+  pendingRequests: Mt5PendingSyncRequest[];
   syncUrl: string;
 };
 
@@ -31,30 +34,11 @@ function formatDateTime(value: string | null | undefined) {
   }).format(new Date(value));
 }
 
-export function Mt5SyncPanel({ connection, pendingRequest, syncUrl }: Mt5SyncPanelProps) {
+export function Mt5SyncPanel({ connections, pendingRequests, syncUrl }: Mt5SyncPanelProps) {
   const [state, formAction, pending] = useActionState<GenerateMt5ApiKeyState, FormData>(generateMt5ApiKeyAction, {});
-  const [resyncState, resyncFormAction, resyncPending] = useActionState<RequestMt5HistoryResyncState, FormData>(
-    requestMt5HistoryResyncAction,
-    {},
-  );
   const [copied, setCopied] = useState<"key" | "url" | null>(null);
-  const activeConnection = state.connection ?? connection;
+  const visibleConnections = state.connection ? [state.connection, ...connections] : connections;
   const apiKey = state.apiKey;
-  const hasConnection = Boolean(activeConnection);
-  const statusLabel = activeConnection?.last_sync_at
-    ? "Synced"
-    : activeConnection?.is_active
-      ? "Ready"
-      : "Not connected";
-  const hasPendingResync = Boolean(pendingRequest ?? resyncState.ok);
-
-  const maskedKey = useMemo(() => {
-    if (apiKey) {
-      return apiKey;
-    }
-
-    return hasConnection ? "API key generated. Rotate to reveal a new key." : "No API key generated yet.";
-  }, [apiKey, hasConnection]);
 
   async function copyValue(value: string, type: "key" | "url") {
     await navigator.clipboard.writeText(value);
@@ -64,17 +48,23 @@ export function Mt5SyncPanel({ connection, pendingRequest, syncUrl }: Mt5SyncPan
 
   return (
     <div className="grid gap-6 xl:grid-cols-12">
-      <Card className="xl:col-span-7">
+      <Card className="xl:col-span-5">
         <CardHeader>
-          <CardTitle>Connection key</CardTitle>
-          <CardDescription>
-            Generate an API key for the future MT5 Expert Advisor. The plain key is shown once.
-          </CardDescription>
+          <CardTitle>New MT5 connection</CardTitle>
+          <CardDescription>Create one API key per broker account or prop firm account.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <form action={formAction}>
+          <form action={formAction} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="account_nickname">Account nickname</Label>
+              <Input id="account_nickname" name="account_nickname" placeholder="FTMO challenge, Pepperstone live..." />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="prop_firm">Broker / prop firm label</Label>
+              <Input id="prop_firm" name="prop_firm" placeholder="FTMO, Exness, FundingPips..." />
+            </div>
             <Button type="submit" disabled={pending}>
-              {pending ? "Generating..." : hasConnection ? "Rotate API key" : "Generate API key"}
+              {pending ? "Generating..." : "Generate connection key"}
             </Button>
           </form>
 
@@ -85,9 +75,13 @@ export function Mt5SyncPanel({ connection, pendingRequest, syncUrl }: Mt5SyncPan
           ) : null}
 
           <div className="space-y-2">
-            <div className="font-medium text-sm">API key</div>
+            <div className="font-medium text-sm">New API key</div>
             <div className="flex gap-2">
-              <Input value={maskedKey} readOnly type={apiKey ? "text" : "password"} />
+              <Input
+                value={apiKey ?? "Generate a connection key to reveal it once."}
+                readOnly
+                type={apiKey ? "text" : "password"}
+              />
               <Button
                 type="button"
                 variant="outline"
@@ -98,7 +92,7 @@ export function Mt5SyncPanel({ connection, pendingRequest, syncUrl }: Mt5SyncPan
               </Button>
             </div>
             <p className="text-muted-foreground text-xs">
-              Store this somewhere safe. Qyvex Edge stores only a hash and cannot show the same key again.
+              Store this key safely. Qyvex Edge stores only a hash and cannot show it again.
             </p>
           </div>
 
@@ -114,61 +108,106 @@ export function Mt5SyncPanel({ connection, pendingRequest, syncUrl }: Mt5SyncPan
         </CardContent>
       </Card>
 
-      <Card className="xl:col-span-5">
+      <Card className="xl:col-span-7">
         <CardHeader>
-          <CardTitle>Connection status</CardTitle>
-          <CardDescription>Use this panel to confirm whether MT5 has synced into Qyvex Edge.</CardDescription>
+          <CardTitle>Connected accounts</CardTitle>
+          <CardDescription>Manage each MT5 account independently. Use one EA key per account.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between rounded-2xl border bg-secondary/50 p-4">
-            <span className="text-muted-foreground text-sm">Status</span>
-            <Badge
-              variant="secondary"
-              className={
-                activeConnection?.is_active ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-muted text-muted-foreground"
-              }
-            >
-              {statusLabel}
-            </Badge>
-          </div>
-          <StatusRow label="Last sync" value={formatDateTime(activeConnection?.last_sync_at)} />
-          <StatusRow label="Account" value={activeConnection?.account_number ?? "Waiting for first MT5 sync"} />
-          <StatusRow label="Broker" value={activeConnection?.broker ?? "Waiting for first MT5 sync"} />
-          <div className="rounded-2xl border bg-secondary/40 p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="font-medium text-sm">History resync</div>
-                <p className="mt-1 text-muted-foreground text-xs">
-                  Request this if you deleted MT5-imported trades and want the EA to resend history once.
-                </p>
-              </div>
-              <Badge variant="secondary" className={hasPendingResync ? "bg-warning/10 text-warning" : ""}>
-                {hasPendingResync ? "Pending" : "Idle"}
-              </Badge>
-            </div>
-            <form action={resyncFormAction} className="mt-4">
-              <Button type="submit" variant="outline" disabled={resyncPending || !hasConnection}>
-                {resyncPending ? "Requesting..." : "Request 365-day resync"}
-              </Button>
-            </form>
-            {resyncState.error ? <p className="mt-3 text-destructive text-xs">{resyncState.error}</p> : null}
-            {hasPendingResync ? (
-              <p className="mt-3 text-muted-foreground text-xs">
-                The EA will pick this up on its next sync and mark it complete after sending history.
+        <CardContent className="space-y-3">
+          {visibleConnections.length ? (
+            visibleConnections.map((connection) => {
+              const pendingRequest = pendingRequests.find((request) => request.mt5_connection_id === connection.id);
+              return <ConnectionCard key={connection.id} connection={connection} pendingRequest={pendingRequest} />;
+            })
+          ) : (
+            <div className="rounded-2xl border border-dashed p-8 text-center">
+              <div className="font-medium">No MT5 accounts connected yet</div>
+              <p className="mt-2 text-muted-foreground text-sm">
+                Generate a connection key, paste it into the EA, and the account will appear after first sync.
               </p>
-            ) : null}
-          </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
   );
 }
 
-function StatusRow({ label, value }: { label: string; value: string }) {
+function ConnectionCard({
+  connection,
+  pendingRequest,
+}: {
+  connection: Mt5ConnectionStatus;
+  pendingRequest?: Mt5PendingSyncRequest;
+}) {
+  const [resyncState, resyncFormAction, resyncPending] = useActionState<RequestMt5HistoryResyncState, FormData>(
+    requestMt5HistoryResyncAction,
+    {},
+  );
+  const [disconnectState, disconnectFormAction, disconnectPending] = useActionState<
+    DisconnectMt5ConnectionState,
+    FormData
+  >(disconnectMt5ConnectionAction, {});
+  const hasPendingResync = Boolean(pendingRequest ?? (resyncState.ok && resyncState.connectionId === connection.id));
+
+  const statusLabel = connection.last_sync_at ? "Synced" : connection.is_active ? "Ready" : "Inactive";
+  const accountLabel = connection.account_number ?? "Waiting for first sync";
+  const brokerLabel = connection.broker ?? "Broker unknown";
+  const propFirmLabel = connection.prop_firm || "No firm label";
+
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border bg-secondary/40 p-4">
-      <span className="text-muted-foreground text-sm">{label}</span>
-      <span className="text-right font-medium text-sm">{value}</span>
+    <div className="rounded-2xl border bg-secondary/40 p-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="font-medium">{connection.account_nickname}</div>
+            <Badge
+              variant="secondary"
+              className={connection.is_active ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-muted text-muted-foreground"}
+            >
+              {statusLabel}
+            </Badge>
+            {hasPendingResync ? (
+              <Badge variant="secondary" className="bg-warning/10 text-warning">
+                Resync pending
+              </Badge>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2 text-muted-foreground text-sm">
+            <span>{brokerLabel}</span>
+            <span>/</span>
+            <span>{accountLabel}</span>
+            <span>/</span>
+            <span>{propFirmLabel}</span>
+          </div>
+          <div className="text-muted-foreground text-xs">Last sync: {formatDateTime(connection.last_sync_at)}</div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <form action={resyncFormAction}>
+            <input type="hidden" name="connection_id" value={connection.id} />
+            <Button type="submit" variant="outline" size="sm" disabled={resyncPending || !connection.is_active}>
+              {resyncPending ? "Requesting..." : "Request 365-day resync"}
+            </Button>
+          </form>
+          <form action={disconnectFormAction}>
+            <input type="hidden" name="connection_id" value={connection.id} />
+            <Button type="submit" variant="outline" size="sm" disabled={disconnectPending || !connection.is_active}>
+              {disconnectPending ? "Disconnecting..." : "Disconnect"}
+            </Button>
+          </form>
+        </div>
+      </div>
+
+      {resyncState.error && resyncState.connectionId === connection.id ? (
+        <p className="mt-3 text-destructive text-xs">{resyncState.error}</p>
+      ) : null}
+      {disconnectState.error && disconnectState.connectionId === connection.id ? (
+        <p className="mt-3 text-destructive text-xs">{disconnectState.error}</p>
+      ) : null}
+      {disconnectState.ok && disconnectState.connectionId === connection.id ? (
+        <p className="mt-3 text-muted-foreground text-xs">Connection marked inactive.</p>
+      ) : null}
     </div>
   );
 }

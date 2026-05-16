@@ -7,16 +7,67 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { getMt5Connections } from "@/lib/data/mt5";
 import { calculateDashboardMetrics, getPrimaryAnalysis, getTrades } from "@/lib/data/trades";
 import { formatTradeDateTime } from "@/lib/format-trade-time";
+import type { TradeWithAnalysis } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function Page() {
+function getFilteredTrades({
+  account,
+  broker,
+  propFirm,
+  trades,
+  propFirmConnectionIds,
+}: {
+  account?: string;
+  broker?: string;
+  propFirm?: string;
+  trades: TradeWithAnalysis[];
+  propFirmConnectionIds: Set<string>;
+}) {
+  return trades.filter((trade) => {
+    if (account && trade.mt5_connection_id !== account) {
+      return false;
+    }
+
+    if (broker && trade.mt5_broker !== broker) {
+      return false;
+    }
+
+    if (propFirm && (!trade.mt5_connection_id || !propFirmConnectionIds.has(trade.mt5_connection_id))) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ account?: string; broker?: string; propFirm?: string }>;
+}) {
   noStore();
 
-  const trades = await getTrades();
+  const [allTrades, connections] = await Promise.all([getTrades(), getMt5Connections()]);
+  const { account, broker, propFirm } = await searchParams;
+  const propFirmConnectionIds = new Set(
+    connections.filter((connection) => connection.prop_firm === propFirm).map((connection) => connection.id),
+  );
+  const trades = getFilteredTrades({
+    account,
+    broker,
+    propFirm,
+    trades: allTrades,
+    propFirmConnectionIds,
+  });
   const metrics = calculateDashboardMetrics(trades);
+  const brokerOptions = [...new Set(connections.map((connection) => connection.broker).filter(Boolean) as string[])];
+  const propFirmOptions = [
+    ...new Set(connections.map((connection) => connection.prop_firm).filter(Boolean) as string[]),
+  ];
   const chartData = trades
     .slice(0, 7)
     .reverse()
@@ -45,6 +96,34 @@ export default async function Page() {
         <MetricCard title="Win rate" value={`${metrics.winRate}%`} signal="WR" />
         <MetricCard title="Total P/L" value={metrics.totalProfitLoss} signal="PL" />
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Account filters</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button asChild size="sm" variant={!account && !broker && !propFirm ? "default" : "outline"}>
+            <Link href="/dashboard">All accounts</Link>
+          </Button>
+          {connections.map((connection) => (
+            <Button key={connection.id} asChild size="sm" variant={account === connection.id ? "default" : "outline"}>
+              <Link href={`/dashboard?account=${connection.id}`}>
+                {connection.account_nickname} {connection.account_number ? `(${connection.account_number})` : ""}
+              </Link>
+            </Button>
+          ))}
+          {brokerOptions.map((option) => (
+            <Button key={option} asChild size="sm" variant={broker === option ? "default" : "outline"}>
+              <Link href={`/dashboard?broker=${encodeURIComponent(option)}`}>{option}</Link>
+            </Button>
+          ))}
+          {propFirmOptions.map((option) => (
+            <Button key={option} asChild size="sm" variant={propFirm === option ? "default" : "outline"}>
+              <Link href={`/dashboard?propFirm=${encodeURIComponent(option)}`}>{option}</Link>
+            </Button>
+          ))}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard title="Total trades" value={metrics.totalTrades} signal="TR" compact />

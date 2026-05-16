@@ -248,18 +248,22 @@ async function main() {
     .update({ is_active: false })
     .eq("api_key_hash", hashMt5ApiKey(TEST_API_KEY))
     .neq("user_id", user.id);
+  await supabase
+    .from("mt5_connections")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("api_key_hash", hashMt5ApiKey(TEST_API_KEY));
   await supabase.from("mt5_sync_requests").delete().eq("user_id", user.id).eq("status", "pending");
 
-  const { error: connectionError } = await supabase.from("mt5_connections").upsert(
-    {
-      user_id: user.id,
-      api_key_hash: hashMt5ApiKey(TEST_API_KEY),
-      account_number: TEST_ACCOUNT,
-      broker: TEST_BROKER,
-      is_active: true,
-    },
-    { onConflict: "user_id" },
-  );
+  const { error: connectionError } = await supabase.from("mt5_connections").insert({
+    user_id: user.id,
+    api_key_hash: hashMt5ApiKey(TEST_API_KEY),
+    account_number: TEST_ACCOUNT,
+    broker: TEST_BROKER,
+    account_nickname: "Qyvex MT5 test",
+    prop_firm: "Qyvex Demo",
+    is_active: true,
+  });
 
   if (connectionError) {
     throw connectionError;

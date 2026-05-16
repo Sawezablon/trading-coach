@@ -51,6 +51,7 @@ export async function GET(request: Request) {
     .from("mt5_sync_requests")
     .select("id, lookback_days")
     .eq("user_id", connection.user_id)
+    .eq("mt5_connection_id", connection.id)
     .eq("status", "pending")
     .order("created_at", { ascending: true })
     .limit(1)
