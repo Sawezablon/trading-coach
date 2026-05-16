@@ -140,6 +140,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const screenshotUrl = (await uploadScreenshot(user.id, screenshot)) ?? existingTrade.screenshot_url;
   const shouldRerunRules =
     entryFieldsChanged(existingTrade as Trade, parsed.data, manualRuleIds) || Boolean(screenshot);
+  const { data: rulesData, error: rulesLoadError } = await supabase
+    .from("trading_rules")
+    .select("*")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (rulesLoadError) {
+    return NextResponse.json({ error: rulesLoadError.message }, { status: 400 });
+  }
+
+  const rules = rulesData as RuleSettings | null;
 
   let checklistUpdate = {
     checklist_results: existingTrade.checklist_results,
@@ -150,16 +161,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   };
 
   if (shouldRerunRules) {
-    const { data: rulesData, error: rulesError } = await supabase
-      .from("trading_rules")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (rulesError) {
-      return NextResponse.json({ error: rulesError.message }, { status: 400 });
-    }
-
     const startOfDay = new Date(parsed.data.trade_taken_at);
     const submittedDayStart = asIsoDateTime(formData.get("trade_day_start"));
     const submittedDayEnd = asIsoDateTime(formData.get("trade_day_end"));
@@ -179,7 +180,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       : tradesTodayQuery.is("mt5_connection_id", null);
     const { count: tradesToday } = await tradesTodayQuery;
 
-    const rules = rulesData as RuleSettings;
+    if (!rules) {
+      return NextResponse.json({ error: "Trading rules could not be loaded." }, { status: 400 });
+    }
+
     const checklist = evaluateTradeChecklist(
       {
         ...parsed.data,
@@ -212,10 +216,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       mt5_broker: selectedConnection?.broker ?? null,
       screenshot_url: screenshotUrl,
       ...checklistUpdate,
-      system_analysis: evaluateSystemTradeReview({
-        ...(existingTrade as Trade),
-        ...parsed.data,
-      }),
+      system_analysis: evaluateSystemTradeReview(
+        {
+          ...(existingTrade as Trade),
+          ...parsed.data,
+        },
+        rules,
+      ),
       review_status: "reviewed",
       review_completed_at: new Date().toISOString(),
     })

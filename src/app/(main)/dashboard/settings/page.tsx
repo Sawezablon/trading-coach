@@ -49,7 +49,9 @@ export default async function SettingsPage({
       <Card>
         <CardHeader>
           <CardTitle>Trading rules</CardTitle>
-          <CardDescription>Comma separate sessions, for example: London, New York.</CardDescription>
+          <CardDescription>
+            These rules drive the trade checklist and the automatic MT5 system review where MT5 data is available.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form action={saveRulesAction} className="grid gap-4 md:grid-cols-2">

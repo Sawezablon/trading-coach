@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database, Json, TradeDirection, TradeResult, TradeStatus } from "../supabase/types";
+import type { Database, Json, RuleSettings, TradeDirection, TradeResult, TradeStatus } from "../supabase/types";
 import { evaluateSystemTradeReview } from "../system-review";
 import { createHash } from "node:crypto";
 
@@ -174,6 +174,7 @@ function mapMt5Trade({
   broker,
   connectionId,
   rawTrade,
+  rules,
   userId,
   syncedAt,
 }: {
@@ -181,6 +182,7 @@ function mapMt5Trade({
   broker: string | null;
   connectionId: string;
   rawTrade: Mt5TradePayload;
+  rules: RuleSettings | null;
   userId: string;
   syncedAt: string;
 }): TradeMutation | null {
@@ -216,8 +218,11 @@ function mapMt5Trade({
     {
       account_balance_at_sync: accountBalance,
       account_currency: accountCurrency,
+      direction,
+      entry_price: entryPrice,
       estimated_risk_amount: estimatedRisk.amount,
       estimated_risk_percent: estimatedRisk.percent,
+      pair,
       profit_loss_amount: status === "closed" ? profit : null,
       risk_calculation_method: estimatedRisk.method,
       status,
@@ -225,6 +230,7 @@ function mapMt5Trade({
       take_profit: takeProfit,
       trade_taken_at: tradeTakenAt,
     },
+    rules,
     syncedAt,
   );
 
@@ -478,6 +484,16 @@ export async function syncMt5Trades(
     return { error: duplicateError, status: 400 };
   }
 
+  const { data: rulesData, error: rulesError } = await supabase
+    .from("trading_rules")
+    .select("*")
+    .eq("user_id", connection.user_id)
+    .maybeSingle();
+
+  if (rulesError) {
+    return { error: rulesError.message, status: 400 };
+  }
+
   let created = 0;
   let updated = 0;
   let skipped = 0;
@@ -505,6 +521,7 @@ export async function syncMt5Trades(
       broker,
       connectionId: connection.id,
       rawTrade: item as Mt5TradePayload,
+      rules: (rulesData as RuleSettings | null) ?? null,
       userId: connection.user_id,
       syncedAt,
     });

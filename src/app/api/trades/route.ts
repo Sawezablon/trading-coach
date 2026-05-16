@@ -203,7 +203,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const systemAnalysis = evaluateSystemTradeReview(tradeInput);
+  const systemAnalysis = evaluateSystemTradeReview(tradeInput, rules);
   const { data: trade, error: tradeError } = await supabase
     .from("trades")
     .insert({
