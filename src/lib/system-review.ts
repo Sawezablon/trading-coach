@@ -18,6 +18,8 @@ export type SystemTradeReview = {
 type RuleSettings = {
   allowed_directions?: string[];
   allowed_pairs?: string[];
+  require_stop_loss?: boolean;
+  require_take_profit?: boolean;
   max_risk_percent?: number;
   min_rr?: number;
 };
@@ -94,33 +96,42 @@ export function evaluateSystemTradeReview(
   const hasStopLoss = Number(trade.stop_loss ?? 0) > 0;
   const hasTakeProfit = Number(trade.take_profit ?? 0) > 0;
   const estimatedRisk = trade.estimated_risk_percent;
-  const maxRiskPercent = Number(rules?.max_risk_percent ?? 2);
+  const maxRiskPercent = Number(rules?.max_risk_percent ?? 0);
   const minRr = Number(rules?.min_rr ?? 0);
   const allowedPairs = (rules?.allowed_pairs ?? []).map(normalize).filter(Boolean);
   const allowedDirections = (rules?.allowed_directions ?? []).map(normalize).filter(Boolean);
   const plannedRr = calculatePlannedRr(trade);
 
-  items.push(
-    item(
-      "stop-loss",
-      "Stop loss present",
-      hasStopLoss ? "passed" : "failed",
-      "high",
-      hasStopLoss ? "MT5 reported a stop loss for this trade." : "No stop loss was reported by MT5.",
-    ),
-  );
+  if (rules?.require_stop_loss) {
+    items.push(
+      item(
+        "stop-loss",
+        "Stop loss present",
+        hasStopLoss ? "passed" : "failed",
+        "high",
+        hasStopLoss ? "MT5 reported a stop loss for this trade." : "No stop loss was reported by MT5.",
+      ),
+    );
+  }
 
-  items.push(
-    item(
-      "take-profit",
-      "Take profit present",
-      hasTakeProfit ? "passed" : "warning",
-      "medium",
-      hasTakeProfit ? "MT5 reported a take profit for this trade." : "No take profit was reported by MT5.",
-    ),
-  );
+  if (rules?.require_take_profit) {
+    items.push(
+      item(
+        "take-profit",
+        "Take profit present",
+        hasTakeProfit ? "passed" : "warning",
+        "medium",
+        hasTakeProfit ? "MT5 reported a take profit for this trade." : "No take profit was reported by MT5.",
+      ),
+    );
+  }
 
-  if (trade.risk_calculation_method === "mt5_symbol_specs" && estimatedRisk !== null && estimatedRisk !== undefined) {
+  if (
+    maxRiskPercent > 0 &&
+    trade.risk_calculation_method === "mt5_symbol_specs" &&
+    estimatedRisk !== null &&
+    estimatedRisk !== undefined
+  ) {
     const status: SystemReviewStatus = estimatedRisk > maxRiskPercent ? "failed" : "passed";
     items.push(
       item(
@@ -134,7 +145,7 @@ export function evaluateSystemTradeReview(
         )}) using account balance ${money(trade.account_balance_at_sync, trade.account_currency)}.`,
       ),
     );
-  } else {
+  } else if (maxRiskPercent > 0) {
     items.push(
       item(
         "estimated-risk",

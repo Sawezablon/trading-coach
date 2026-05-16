@@ -37,7 +37,9 @@ function mockAnalysis(input: AnalyzeTradeInput): Omit<AiAnalysis, "id" | "create
   const emotionalRisk = getEmotionRisk(input.emotions);
   const baseDiscipline = 92 - ruleViolations.length * 14 - (emotionalRisk === "high-risk" ? 10 : 0);
   const disciplineScore = Math.max(20, Math.min(96, baseDiscipline));
-  const setupQualityScore = Math.max(35, Math.min(90, 68 + (input.rr >= input.rules.min_rr ? 8 : -10)));
+  const rrPasses = input.rules.min_rr <= 0 || input.rr >= input.rules.min_rr;
+  const riskPasses = input.rules.max_risk_percent <= 0 || input.risk_percent <= input.rules.max_risk_percent;
+  const setupQualityScore = Math.max(35, Math.min(90, 68 + (rrPasses ? 8 : -10)));
 
   return {
     trade_id: input.tradeId,
@@ -46,9 +48,7 @@ function mockAnalysis(input: AnalyzeTradeInput): Omit<AiAnalysis, "id" | "create
     discipline_score: disciplineScore,
     strengths: [
       input.notes.length > 40 ? "Trade context was documented with useful detail" : "Trade was logged promptly",
-      input.risk_percent <= input.rules.max_risk_percent
-        ? "Risk stayed within the written plan"
-        : "Risk was visible enough to audit",
+      riskPasses ? "Risk stayed within the written plan" : "Risk was visible enough to audit",
     ],
     weaknesses: ruleViolations.length
       ? ["Execution drifted from at least one rule"]

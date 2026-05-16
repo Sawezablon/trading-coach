@@ -13,6 +13,9 @@ export const demoRules: RuleSettings = {
   confirmation_required: true,
   require_screenshot: false,
   max_trades_per_day: 3,
+  require_stop_loss: true,
+  require_take_profit: true,
+  check_emotional_state: true,
   strict_mode: false,
   custom_rules: [
     "Only enter after liquidity sweep and confirmation close",

@@ -90,6 +90,9 @@ export type RuleSettings = {
   confirmation_required: boolean;
   require_screenshot: boolean;
   max_trades_per_day: number;
+  require_stop_loss: boolean;
+  require_take_profit: boolean;
+  check_emotional_state: boolean;
   strict_mode: boolean;
   custom_rules: string[];
   notes: string | null;

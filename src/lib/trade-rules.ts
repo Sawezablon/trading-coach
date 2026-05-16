@@ -47,49 +47,77 @@ function item(
 export function evaluateTradeChecklist(trade: TradeRuleInput, rules: RuleSettings): ChecklistEvaluation {
   const allowedPairs = rules.allowed_pairs.map(normalize).filter(Boolean);
   const allowedSessions = rules.allowed_sessions.map(normalize).filter(Boolean);
-  const allowedDirections = rules.allowed_directions.length ? rules.allowed_directions : ["long", "short"];
+  const allowedDirections = rules.allowed_directions.map(normalize).filter(Boolean);
   const manualRuleIds = new Set(trade.manualRuleIds ?? []);
 
-  const items: ChecklistItemResult[] = [
-    item("risk", `Risk must be below ${rules.max_risk_percent}%`, trade.risk_percent <= rules.max_risk_percent),
-    item("rr", `RR must be at least 1:${rules.min_rr}`, trade.rr >= rules.min_rr),
-    item(
-      "session",
-      `Session must be one of: ${rules.allowed_sessions.join(", ") || "Any"}`,
-      allowedSessions.length === 0 || allowedSessions.includes(normalize(trade.session)),
-    ),
-    item(
-      "pair",
-      allowedPairs.length ? `Pair must be one of: ${rules.allowed_pairs.join(", ")}` : "Pair is allowed",
-      allowedPairs.length === 0 || allowedPairs.includes(normalize(trade.pair)),
-    ),
-    item(
-      "direction",
-      `Direction must be one of: ${allowedDirections.join(", ")}`,
-      allowedDirections.includes(trade.direction),
-    ),
-    item(
-      "screenshot",
-      rules.require_screenshot ? "Screenshot required" : "Screenshot optional",
-      !rules.require_screenshot || trade.hasScreenshot,
-    ),
-    item(
-      "trades-per-day",
-      `Max trades per day: ${rules.max_trades_per_day}`,
-      (trade.tradesToday ?? 0) < rules.max_trades_per_day,
-    ),
-  ];
+  const items: ChecklistItemResult[] = [];
+
+  if (rules.max_risk_percent > 0) {
+    items.push(
+      item("risk", `Risk must be below ${rules.max_risk_percent}%`, trade.risk_percent <= rules.max_risk_percent),
+    );
+  }
+
+  if (rules.min_rr > 0) {
+    items.push(item("rr", `RR must be at least 1:${rules.min_rr}`, trade.rr >= rules.min_rr));
+  }
+
+  if (allowedSessions.length > 0) {
+    items.push(
+      item(
+        "session",
+        `Session must be one of: ${rules.allowed_sessions.join(", ")}`,
+        allowedSessions.includes(normalize(trade.session)),
+      ),
+    );
+  }
+
+  if (allowedPairs.length > 0) {
+    items.push(
+      item(
+        "pair",
+        `Pair must be one of: ${rules.allowed_pairs.join(", ")}`,
+        allowedPairs.includes(normalize(trade.pair)),
+      ),
+    );
+  }
+
+  if (allowedDirections.length > 0) {
+    items.push(
+      item(
+        "direction",
+        `Direction must be one of: ${allowedDirections.join(", ")}`,
+        allowedDirections.includes(trade.direction),
+      ),
+    );
+  }
+
+  if (rules.require_screenshot) {
+    items.push(item("screenshot", "Screenshot required", trade.hasScreenshot));
+  }
+
+  if (rules.max_trades_per_day > 0) {
+    items.push(
+      item(
+        "trades-per-day",
+        `Max trades per day: ${rules.max_trades_per_day}`,
+        (trade.tradesToday ?? 0) < rules.max_trades_per_day,
+      ),
+    );
+  }
 
   if (rules.confirmation_required) {
     items.push(item("confirmation", "Confirmation candle closed", trade.confirmation));
   }
 
-  const emotionRisk = getEmotionRisk(trade.emotions);
+  if (rules.check_emotional_state) {
+    const emotionRisk = getEmotionRisk(trade.emotions);
 
-  if (emotionRisk === "high-risk") {
-    items.push(item("emotional-control", "Emotional state supports disciplined execution", false));
-  } else {
-    items.push(item("emotional-control", "Emotional state supports disciplined execution", true));
+    if (emotionRisk === "high-risk") {
+      items.push(item("emotional-control", "Emotional state supports disciplined execution", false));
+    } else {
+      items.push(item("emotional-control", "Emotional state supports disciplined execution", true));
+    }
   }
 
   for (const [index, label] of rules.custom_rules.entries()) {
