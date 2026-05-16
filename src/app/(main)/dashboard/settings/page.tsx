@@ -156,11 +156,6 @@ export default async function SettingsPage({
                   label="Require take profit"
                 />
                 <SystemToggle
-                  id="confirmation_required"
-                  defaultChecked={rules.confirmation_required}
-                  label="Confirmation required before entry"
-                />
-                <SystemToggle
                   id="require_screenshot"
                   defaultChecked={rules.require_screenshot}
                   label="Screenshot required before saving a trade"
@@ -187,6 +182,11 @@ export default async function SettingsPage({
               </div>
 
               <div className="space-y-4">
+                <SystemToggle
+                  id="confirmation_required"
+                  defaultChecked={rules.confirmation_required}
+                  label="Confirmation required before entry"
+                />
                 <div className="space-y-2">
                   <Label htmlFor="custom_rules">Your personal rules</Label>
                   <Textarea
