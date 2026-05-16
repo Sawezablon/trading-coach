@@ -23,6 +23,12 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
   const tradeDateTime = formatTradeDateTime(trade.trade_taken_at, trade.trade_timezone);
   const closedDateTime = trade.closed_at ? formatTradeDateTime(trade.closed_at, trade.trade_timezone) : null;
   const tradeTimezone = getTradeTimeZone(trade);
+  const estimatedRiskPercent =
+    trade.estimated_risk_percent === null ? null : `${Number(trade.estimated_risk_percent).toFixed(2)}%`;
+  const estimatedRiskAmount =
+    trade.estimated_risk_amount === null
+      ? null
+      : `${trade.account_currency ? `${trade.account_currency} ` : ""}${Number(trade.estimated_risk_amount).toFixed(2)}`;
 
   return (
     <div className="grid gap-6 xl:grid-cols-12">
@@ -82,9 +88,16 @@ export default async function TradeDetailPage({ params }: { params: Promise<{ id
             <Info label="MT5 broker" value={trade.mt5_broker} />
             <Info label="MT5 account" value={trade.mt5_account} />
             <Info label="Risk" value={`${trade.risk_percent}%`} />
+            <Info label="Estimated risk amount" value={estimatedRiskAmount} />
+            <Info label="Estimated risk method" value={formatRiskMethod(trade.risk_calculation_method)} />
+            <Info
+              label="Account balance at sync"
+              value={formatCurrency(trade.account_balance_at_sync, trade.account_currency)}
+            />
             <Info label="Planned RR" value={`${trade.rr}R`} />
             <Info label="Session" value={trade.session} />
             <Info label="Confirmation" value={trade.confirmation ? "Yes" : "No"} />
+            <Info label="Estimated risk %" value={estimatedRiskPercent} />
             <div className="space-y-1 md:col-span-2">
               <div className="text-muted-foreground text-sm">Emotions before trade</div>
               <div>{formatEmotions(trade.emotions)}</div>
@@ -189,6 +202,28 @@ function Info({ label, value }: { label: string; value: string | number | null |
       <div className="capitalize">{value ?? "Not recorded"}</div>
     </div>
   );
+}
+
+function formatCurrency(value: number | null | undefined, currency: string | null | undefined) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return `${currency ? `${currency} ` : ""}${Number(value).toFixed(2)}`;
+}
+
+function formatRiskMethod(method: string | null | undefined) {
+  if (!method) {
+    return null;
+  }
+
+  const labels: Record<string, string> = {
+    insufficient_data: "Needs MT5 symbol specs",
+    missing_stop_loss: "No stop loss set",
+    mt5_symbol_specs: "MT5 balance and symbol specs",
+  };
+
+  return labels[method] ?? method.replaceAll("_", " ");
 }
 
 function Score({ label, value }: { label: string; value: number }) {

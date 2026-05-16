@@ -4,7 +4,7 @@
 //| This EA does not place, modify, or close trades.                  |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "1.03"
+#property version   "1.04"
 #property description "Read-only Qyvex Edge trade sync EA."
 
 input string QyvexApiKey = "";
@@ -221,6 +221,15 @@ string BuildTradeJson(
    string status
 )
 {
+   double accountBalance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double accountEquity = AccountInfoDouble(ACCOUNT_EQUITY);
+   string accountCurrency = AccountInfoString(ACCOUNT_CURRENCY);
+   double tickValue = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+   double tickSize = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+   double contractSize = SymbolInfoDouble(symbol, SYMBOL_TRADE_CONTRACT_SIZE);
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   long digits = SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+
    string json = "{";
    json += "\"ticket\":" + JsonString(ticket) + ",";
    json += "\"symbol\":" + JsonString(symbol) + ",";
@@ -235,6 +244,14 @@ string BuildTradeJson(
    json += "\"profit\":" + JsonNumber(profit) + ",";
    json += "\"commission\":" + JsonNumber(commission) + ",";
    json += "\"swap\":" + JsonNumber(swap) + ",";
+   json += "\"accountBalance\":" + JsonNumber(accountBalance) + ",";
+   json += "\"accountEquity\":" + JsonNumber(accountEquity) + ",";
+   json += "\"accountCurrency\":" + JsonString(accountCurrency) + ",";
+   json += "\"tickValue\":" + JsonNumber(tickValue) + ",";
+   json += "\"tickSize\":" + JsonNumber(tickSize) + ",";
+   json += "\"contractSize\":" + JsonNumber(contractSize) + ",";
+   json += "\"point\":" + JsonNumber(point) + ",";
+   json += "\"digits\":" + IntegerToString((int)digits) + ",";
    json += "\"status\":" + JsonString(status);
    json += "}";
    return json;

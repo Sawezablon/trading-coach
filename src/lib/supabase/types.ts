@@ -32,6 +32,17 @@ export type Trade = {
   lot_size: number | null;
   commission: number | null;
   swap: number | null;
+  account_balance_at_sync: number | null;
+  account_equity_at_sync: number | null;
+  account_currency: string | null;
+  symbol_tick_value: number | null;
+  symbol_tick_size: number | null;
+  symbol_contract_size: number | null;
+  symbol_point: number | null;
+  symbol_digits: number | null;
+  estimated_risk_amount: number | null;
+  estimated_risk_percent: number | null;
+  risk_calculation_method: string | null;
   screenshot_url: string | null;
   checklist_results: ChecklistItemResult[];
   passed_rules: string[];

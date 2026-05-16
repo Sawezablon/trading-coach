@@ -53,6 +53,11 @@ function positiveNumberValue(value: unknown) {
   return parsed && parsed > 0 ? parsed : null;
 }
 
+function integerValue(value: unknown) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
 function parseMt5Date(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {
     if (value <= 0) {
@@ -115,6 +120,54 @@ function getTicket(trade: Mt5TradePayload) {
   return optionalString(trade.ticket ?? trade.mt5_ticket ?? trade.orderTicket ?? trade.positionTicket);
 }
 
+function calculateEstimatedRisk({
+  accountBalance,
+  entryPrice,
+  lotSize,
+  stopLoss,
+  tickSize,
+  tickValue,
+}: {
+  accountBalance: number | null;
+  entryPrice: number | null;
+  lotSize: number | null;
+  stopLoss: number | null;
+  tickSize: number | null;
+  tickValue: number | null;
+}) {
+  if (!stopLoss || stopLoss <= 0) {
+    return {
+      amount: null,
+      method: "missing_stop_loss",
+      percent: null,
+    };
+  }
+
+  if (!entryPrice || !lotSize || !tickSize || !tickValue || !accountBalance || accountBalance <= 0) {
+    return {
+      amount: null,
+      method: "insufficient_data",
+      percent: null,
+    };
+  }
+
+  const amount = (Math.abs(entryPrice - stopLoss) / tickSize) * tickValue * lotSize;
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    return {
+      amount: null,
+      method: "insufficient_data",
+      percent: null,
+    };
+  }
+
+  return {
+    amount: Number(amount.toFixed(2)),
+    method: "mt5_symbol_specs",
+    percent: Number(((amount / accountBalance) * 100).toFixed(2)),
+  };
+}
+
 function mapMt5Trade({
   accountNumber,
   broker,
@@ -135,6 +188,21 @@ function mapMt5Trade({
   const direction = normalizeDirection(rawTrade.type ?? rawTrade.direction);
   const tradeTakenAt = parseMt5Date(rawTrade.openTime);
   const closedAt = parseMt5Date(rawTrade.closeTime);
+  const entryPrice = positiveNumberValue(rawTrade.entryPrice);
+  const stopLoss = positiveNumberValue(rawTrade.stopLoss);
+  const takeProfit = positiveNumberValue(rawTrade.takeProfit);
+  const lotSize = numberValue(rawTrade.lotSize ?? rawTrade.volume);
+  const accountBalance = positiveNumberValue(rawTrade.accountBalance);
+  const tickValue = positiveNumberValue(rawTrade.tickValue);
+  const tickSize = positiveNumberValue(rawTrade.tickSize);
+  const estimatedRisk = calculateEstimatedRisk({
+    accountBalance,
+    entryPrice,
+    lotSize,
+    stopLoss,
+    tickSize,
+    tickValue,
+  });
 
   if (!mt5Ticket || !pair || !direction || !tradeTakenAt) {
     return null;
@@ -147,11 +215,11 @@ function mapMt5Trade({
     user_id: userId,
     pair,
     direction,
-    entry_price: positiveNumberValue(rawTrade.entryPrice),
-    stop_loss: positiveNumberValue(rawTrade.stopLoss),
-    take_profit: positiveNumberValue(rawTrade.takeProfit),
-    lot_size: numberValue(rawTrade.lotSize ?? rawTrade.volume),
-    risk_percent: 0,
+    entry_price: entryPrice,
+    stop_loss: stopLoss,
+    take_profit: takeProfit,
+    lot_size: lotSize,
+    risk_percent: estimatedRisk.percent ?? 0,
     rr: 0,
     session: "MT5",
     emotions: "unreviewed",
@@ -167,6 +235,17 @@ function mapMt5Trade({
     profit_loss_amount: status === "closed" ? profit : null,
     commission: numberValue(rawTrade.commission),
     swap: numberValue(rawTrade.swap),
+    account_balance_at_sync: accountBalance,
+    account_equity_at_sync: positiveNumberValue(rawTrade.accountEquity),
+    account_currency: optionalString(rawTrade.accountCurrency),
+    symbol_tick_value: tickValue,
+    symbol_tick_size: tickSize,
+    symbol_contract_size: positiveNumberValue(rawTrade.contractSize),
+    symbol_point: positiveNumberValue(rawTrade.point),
+    symbol_digits: integerValue(rawTrade.digits),
+    estimated_risk_amount: estimatedRisk.amount,
+    estimated_risk_percent: estimatedRisk.percent,
+    risk_calculation_method: estimatedRisk.method,
     final_rr: null,
     closing_notes: status === "closed" ? optionalString(rawTrade.closeComment) : null,
     review_status: "needs_review",
@@ -205,6 +284,18 @@ function getMt5FactUpdate(
     profit_loss_amount: tradeInput.profit_loss_amount,
     commission: tradeInput.commission,
     swap: tradeInput.swap,
+    account_balance_at_sync: tradeInput.account_balance_at_sync,
+    account_equity_at_sync: tradeInput.account_equity_at_sync,
+    account_currency: tradeInput.account_currency,
+    symbol_tick_value: tradeInput.symbol_tick_value,
+    symbol_tick_size: tradeInput.symbol_tick_size,
+    symbol_contract_size: tradeInput.symbol_contract_size,
+    symbol_point: tradeInput.symbol_point,
+    symbol_digits: tradeInput.symbol_digits,
+    estimated_risk_amount: tradeInput.estimated_risk_amount,
+    estimated_risk_percent: tradeInput.estimated_risk_percent,
+    risk_calculation_method: tradeInput.risk_calculation_method,
+    risk_percent: tradeInput.risk_percent,
     mt5_account: tradeInput.mt5_account,
     mt5_broker: tradeInput.mt5_broker,
     mt5_connection_id: tradeInput.mt5_connection_id,
