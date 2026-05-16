@@ -33,7 +33,7 @@ create table if not exists public.trading_rules (
   max_trades_per_day integer not null default 0 check (max_trades_per_day >= 0),
   require_stop_loss boolean not null default true,
   require_take_profit boolean not null default true,
-  check_emotional_state boolean not null default true,
+  check_emotional_state boolean not null default false,
   strict_mode boolean not null default false,
   custom_rules text[] not null default '{}',
   notes text,

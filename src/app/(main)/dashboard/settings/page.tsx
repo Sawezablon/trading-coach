@@ -161,11 +161,6 @@ export default async function SettingsPage({
                   label="Screenshot required before saving a trade"
                 />
                 <SystemToggle
-                  id="check_emotional_state"
-                  defaultChecked={rules.check_emotional_state}
-                  label="Check emotional state"
-                />
-                <SystemToggle
                   id="strict_mode"
                   defaultChecked={rules.strict_mode}
                   label="Strict mode: block trades when required rules fail"

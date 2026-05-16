@@ -1,6 +1,15 @@
 "use client";
 
-import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import {
+  type Dispatch,
+  type FormEvent,
+  type ReactNode,
+  type SetStateAction,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 
 import { useRouter } from "next/navigation";
 
@@ -405,35 +414,6 @@ export function TradeUploadForm({
               </Select>
             </div>
 
-            <div className="space-y-3 md:col-span-2">
-              <Label>Emotions before trade</Label>
-              <div className="flex flex-wrap gap-2">
-                {emotionOptions.map((emotion) => {
-                  const selected = selectedEmotions.includes(emotion.value);
-
-                  return (
-                    <Button
-                      key={emotion.value}
-                      type="button"
-                      variant={selected ? "default" : "outline"}
-                      size="sm"
-                      className="rounded-full"
-                      onClick={() => {
-                        setSelectedEmotions((current) =>
-                          current.includes(emotion.value)
-                            ? current.filter((value) => value !== emotion.value)
-                            : [...current, emotion.value],
-                        );
-                      }}
-                    >
-                      {emotion.label}
-                    </Button>
-                  );
-                })}
-              </div>
-              <input type="hidden" name="emotions" value={emotions} />
-            </div>
-
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="notes">Trade notes</Label>
               <Textarea
@@ -621,7 +601,9 @@ export function TradeUploadForm({
               manualRuleIds={manualRuleIds}
               onManualRuleChange={setManualRuleIds}
               title="User Checklist"
-            />
+            >
+              <EmotionChecklistField selectedEmotions={selectedEmotions} setSelectedEmotions={setSelectedEmotions} />
+            </ChecklistSection>
           </div>
           <div className="rounded-2xl border bg-secondary/50 p-3">
             <div className="flex items-center justify-between text-sm">
@@ -639,6 +621,7 @@ export function TradeUploadForm({
 }
 
 function ChecklistSection({
+  children,
   completionRate,
   description,
   items,
@@ -646,6 +629,7 @@ function ChecklistSection({
   onManualRuleChange,
   title,
 }: {
+  children?: ReactNode;
   completionRate: number;
   description: string;
   items: ChecklistItemResult[];
@@ -666,6 +650,8 @@ function ChecklistSection({
           {passedCount}/{items.length}
         </Badge>
       </div>
+
+      {children}
 
       <div className="space-y-2.5">
         {items.length ? (
@@ -689,6 +675,52 @@ function ChecklistSection({
   );
 }
 
+function EmotionChecklistField({
+  selectedEmotions,
+  setSelectedEmotions,
+}: {
+  selectedEmotions: string[];
+  setSelectedEmotions: Dispatch<SetStateAction<string[]>>;
+}) {
+  return (
+    <div className="rounded-2xl border bg-secondary/35 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="font-medium text-sm">Emotions before trade</div>
+          <div className="text-muted-foreground text-xs">Select what was present before entry.</div>
+        </div>
+        <Badge variant="outline" className="shrink-0 rounded-full">
+          {selectedEmotions.length} selected
+        </Badge>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {emotionOptions.map((emotion) => {
+          const selected = selectedEmotions.includes(emotion.value);
+
+          return (
+            <Button
+              key={emotion.value}
+              type="button"
+              variant={selected ? "default" : "outline"}
+              size="sm"
+              className="rounded-full"
+              onClick={() => {
+                setSelectedEmotions((current) =>
+                  current.includes(emotion.value)
+                    ? current.filter((value) => value !== emotion.value)
+                    : [...current, emotion.value],
+                );
+              }}
+            >
+              {emotion.label}
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ChecklistRuleRow({
   manualRuleIds,
   onManualRuleChange,
@@ -700,7 +732,7 @@ function ChecklistRuleRow({
 }) {
   return (
     <div className={getRuleCardClass(rule.status)}>
-      {rule.type === "manual" ? (
+      {rule.type === "manual" && rule.id !== "emotion-state" ? (
         <Checkbox
           checked={manualRuleIds.includes(rule.id)}
           onCheckedChange={(checked) => {

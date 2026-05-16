@@ -1,4 +1,3 @@
-import { getEmotionRisk } from "@/lib/emotions";
 import type { ChecklistItemResult, RuleSettings, TradeDirection } from "@/lib/supabase/types";
 
 export type TradeRuleInput = {
@@ -116,15 +115,7 @@ export function evaluateTradeChecklist(trade: TradeRuleInput, rules: RuleSetting
     });
   }
 
-  if (rules.check_emotional_state) {
-    const emotionRisk = getEmotionRisk(trade.emotions);
-
-    if (emotionRisk === "high-risk") {
-      items.push(item("emotional-control", "Emotional state supports disciplined execution", false));
-    } else {
-      items.push(item("emotional-control", "Emotional state supports disciplined execution", true));
-    }
-  }
+  items.push(item("emotion-state", "Emotion tagged before trade", Boolean(trade.emotions.trim()), true, "manual"));
 
   for (const [index, label] of rules.custom_rules.entries()) {
     const id = `custom-${index}`;

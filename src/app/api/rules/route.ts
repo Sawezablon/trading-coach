@@ -60,8 +60,7 @@ export async function POST(request: Request) {
       require_stop_loss: formData.get("require_stop_loss") === "on" || formData.get("require_stop_loss") === "true",
       require_take_profit:
         formData.get("require_take_profit") === "on" || formData.get("require_take_profit") === "true",
-      check_emotional_state:
-        formData.get("check_emotional_state") === "on" || formData.get("check_emotional_state") === "true",
+      check_emotional_state: false,
       strict_mode: formData.get("strict_mode") === "on" || formData.get("strict_mode") === "true",
       custom_rules: customRules,
       notes: String(formData.get("notes") ?? ""),
