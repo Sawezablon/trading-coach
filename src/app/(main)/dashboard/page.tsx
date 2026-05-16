@@ -62,6 +62,25 @@ function getTradeIntelligenceScore(trade: TradeWithAnalysis) {
   return average(scores);
 }
 
+function getUserChecklistItems(trade: TradeWithAnalysis) {
+  return (trade.checklist_results ?? []).filter((item) => item.type === "manual");
+}
+
+function getUserChecklistScore(trade: TradeWithAnalysis) {
+  const items = getUserChecklistItems(trade);
+
+  if (!items.length) {
+    return null;
+  }
+
+  return Math.round((items.filter((item) => item.status === "passed").length / items.length) * 100);
+}
+
+function getDashboardUserChecklistScore(trades: TradeWithAnalysis[]) {
+  const scores = trades.map(getUserChecklistScore).filter((score): score is number => score !== null);
+  return scores.length ? average(scores) : 0;
+}
+
 function average(values: number[]) {
   if (!values.length) {
     return 0;
@@ -144,7 +163,7 @@ function getDisciplineIntelligence({
     ? Math.round(((emotionReviewedTrades.length - highRiskEmotionTrades.length) / emotionReviewedTrades.length) * 100)
     : 0;
   const systemScore = metrics.averageSystemScore || (metrics.mt5SyncedTrades ? 0 : 100);
-  const userChecklistScore = metrics.avgChecklistCompletion;
+  const userChecklistScore = getDashboardUserChecklistScore(trades);
   const intelligenceScore = trades.length
     ? Math.round(systemScore * 0.35 + userChecklistScore * 0.25 + reviewCompletion * 0.25 + emotionalControl * 0.15)
     : 0;
@@ -169,7 +188,7 @@ function getDisciplineIntelligence({
     },
     {
       action: "Complete the user checklist before saving trades",
-      detail: `${metrics.avgChecklistCompletion}% average checklist completion.`,
+      detail: `${userChecklistScore}% user checklist discipline.`,
       href: "/dashboard/upload",
       label: "User checklist",
       score: userChecklistScore,
@@ -462,11 +481,16 @@ function DisciplineIntelligence({ model }: { model: ReturnType<typeof getDashboa
         </div>
 
         <div className="grid gap-3">
-          <BreakdownRow label="System rules" value={systemScore} detail={`${metrics.systemAlerts} alerts`} />
+          <DisciplineSplitCard
+            systemAlerts={metrics.systemAlerts}
+            systemScore={systemScore}
+            userScore={userChecklistScore}
+          />
+          <BreakdownRow label="System discipline" value={systemScore} detail={`${metrics.systemAlerts} alerts`} />
           <BreakdownRow
-            label="User checklist"
+            label="User checklist discipline"
             value={userChecklistScore}
-            detail={`${metrics.avgChecklistCompletion}% completion`}
+            detail="Manual confirmations only"
           />
           <BreakdownRow
             label="Review discipline"
@@ -799,6 +823,46 @@ function BreakdownRow({ detail, label, value }: { detail: string; label: string;
         <div className="font-semibold">{value}%</div>
       </div>
       <Progress value={value} className="mt-3" />
+    </div>
+  );
+}
+
+function DisciplineSplitCard({
+  systemAlerts,
+  systemScore,
+  userScore,
+}: {
+  systemAlerts: number;
+  systemScore: number;
+  userScore: number;
+}) {
+  return (
+    <div className="rounded-2xl border border-primary/15 bg-[linear-gradient(135deg,rgb(124_92_255/0.12),rgb(94_234_212/0.05))] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="font-medium text-sm">Discipline split</div>
+          <div className="text-muted-foreground text-xs">Automatic facts vs manual confirmations.</div>
+        </div>
+        <Badge variant="outline" className="rounded-full">
+          {Math.round((systemScore + userScore) / 2)}% avg
+        </Badge>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl border bg-background/35 p-3">
+          <div className="text-muted-foreground text-xs">System discipline</div>
+          <div className="mt-1 font-semibold text-3xl">{systemScore}%</div>
+          <div className="mt-2 text-muted-foreground text-xs">
+            {systemAlerts ? `${systemAlerts} system alert${systemAlerts === 1 ? "" : "s"}` : "No active system alerts"}
+          </div>
+          <Progress value={systemScore} className="mt-3" />
+        </div>
+        <div className="rounded-2xl border bg-background/35 p-3">
+          <div className="text-muted-foreground text-xs">User checklist discipline</div>
+          <div className="mt-1 font-semibold text-3xl">{userScore}%</div>
+          <div className="mt-2 text-muted-foreground text-xs">Manual confirmations completed.</div>
+          <Progress value={userScore} className="mt-3" />
+        </div>
+      </div>
     </div>
   );
 }
