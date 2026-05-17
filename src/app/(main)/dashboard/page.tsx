@@ -721,6 +721,80 @@ function DashboardHeader({
   );
 }
 
+function getCommandCenterState({
+  connection,
+  model,
+}: {
+  connection: Mt5ConnectionStatus | null;
+  model: ReturnType<typeof getDashboardModel>;
+}) {
+  const { metrics, monthlyPerformance, todayDiscipline, todayTrades } = model;
+  const hasTradesToday = todayTrades.length > 0;
+
+  if (monthlyPerformance.status.tone === "danger") {
+    return {
+      badge: "Risk mode",
+      ctaHref: "/dashboard/journal?filter=needs-review",
+      ctaLabel: "Review losing streak",
+      narrative: `${monthlyPerformance.planRiskReasons[0] ?? "Your plan limits are under pressure"}. Review before taking another setup.`,
+      primaryLabel: "Protect the account",
+      primaryValue: "Risk mode",
+      tone: "danger" as const,
+    };
+  }
+
+  if (metrics.needsReviewTrades > 0) {
+    return {
+      badge: "Review mode",
+      ctaHref: "/dashboard/journal?filter=needs-review",
+      ctaLabel: "Open review queue",
+      narrative: "MT5 trades are synced, but manual context is missing. Review them before trusting discipline scores.",
+      primaryLabel: "Reviews pending",
+      primaryValue: String(metrics.needsReviewTrades),
+      tone: "warning" as const,
+    };
+  }
+
+  if (hasTradesToday) {
+    return {
+      badge: "Execution mode",
+      ctaHref: "/dashboard/upload",
+      ctaLabel: "Log trade",
+      narrative:
+        todayDiscipline >= 80
+          ? "Clean execution today. Keep following the same plan and pace."
+          : "Today has decisions worth reviewing. Slow the next trade down.",
+      primaryLabel: "Today's discipline",
+      primaryValue: `${todayDiscipline}%`,
+      tone: todayDiscipline >= 80 ? ("healthy" as const) : ("warning" as const),
+    };
+  }
+
+  if (monthlyPerformance.status.label === "Target hit") {
+    return {
+      badge: "Target hit",
+      ctaHref: "/dashboard/settings/performance",
+      ctaLabel: "Review plan",
+      narrative: "Monthly target is reached. Protect gains and avoid unnecessary trades.",
+      primaryLabel: "Monthly plan",
+      primaryValue: "Target hit",
+      tone: "healthy" as const,
+    };
+  }
+
+  return {
+    badge: connection ? "Calm mode" : "Setup mode",
+    ctaHref: connection ? "/dashboard/settings/performance" : "/dashboard/settings/mt5",
+    ctaLabel: connection ? "Open plan" : "Set up MT5",
+    narrative: connection
+      ? "No trades logged today. Use this calm window to review your plan before the next setup."
+      : "Connect an account or log a trade to start building discipline data.",
+    primaryLabel: "Today",
+    primaryValue: connection ? "No trades" : "Connect",
+    tone: "neutral" as const,
+  };
+}
+
 function DailySnapshotHero({
   connection,
   model,
@@ -728,8 +802,12 @@ function DailySnapshotHero({
   connection: Mt5ConnectionStatus | null;
   model: ReturnType<typeof getDashboardModel>;
 }) {
-  const { behaviorState, behaviorTone, metrics, reviewCompletion, ruleAdherence, todayDiscipline, todayTrades } = model;
-  const heroScore = todayTrades.length ? todayDiscipline : metrics.avgDiscipline;
+  const { metrics, monthlyPerformance, reviewCompletion, ruleAdherence, todayTrades } = model;
+  const commandState = getCommandCenterState({ connection, model });
+  const primaryValueClass =
+    commandState.primaryValue.length > 8
+      ? "font-semibold text-5xl tracking-tight sm:text-6xl"
+      : "font-semibold text-7xl tracking-tight sm:text-8xl";
 
   return (
     <section className="relative overflow-hidden rounded-3xl border border-primary/20 bg-[radial-gradient(circle_at_top_left,rgb(124_92_255/0.20),transparent_32%),linear-gradient(135deg,rgb(23_24_28),rgb(10_10_11))] p-5 shadow-[0_30px_120px_rgb(0_0_0/0.28)] sm:p-6">
@@ -737,18 +815,27 @@ function DailySnapshotHero({
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-6">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className={getToneClass(behaviorTone)}>{behaviorState}</Badge>
+            <Badge className={getStatusClass(commandState.tone)}>{commandState.badge}</Badge>
             <Badge variant="outline" className="rounded-full bg-background/40">
               {todayTrades.length} trades today
+            </Badge>
+            <Badge variant="outline" className="rounded-full bg-background/40">
+              {monthlyPerformance.status.label}
             </Badge>
           </div>
 
           <div>
-            <div className="text-muted-foreground text-sm">Daily discipline snapshot</div>
+            <div className="text-muted-foreground text-sm">Trading command center</div>
             <div className="mt-3 flex flex-wrap items-end gap-4">
-              <div className="font-semibold text-7xl tracking-tight sm:text-8xl">{heroScore}%</div>
-              <div className="mb-3 max-w-sm text-muted-foreground text-sm">
-                {getHeroNarrative({ heroScore, todayTrades: todayTrades.length, violations: metrics.ruleViolations })}
+              <div>
+                <div className={primaryValueClass}>{commandState.primaryValue}</div>
+                <div className="mt-1 text-muted-foreground text-sm">{commandState.primaryLabel}</div>
+              </div>
+              <div className="mb-2 max-w-sm space-y-3 text-muted-foreground text-sm">
+                <p>{commandState.narrative}</p>
+                <Button asChild size="sm">
+                  <Link href={commandState.ctaHref}>{commandState.ctaLabel}</Link>
+                </Button>
               </div>
             </div>
           </div>
@@ -765,6 +852,13 @@ function DailySnapshotHero({
         </div>
 
         <div className="grid content-between gap-4 rounded-2xl border border-border/70 bg-background/35 p-4 backdrop-blur">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="font-medium">Account health</div>
+              <div className="text-muted-foreground text-xs">Current account and monthly context.</div>
+            </div>
+            <Badge variant="outline">{connection ? getMt5ConnectionLabel(connection) : "No account"}</Badge>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <HeroMetric label="Needs review" value={metrics.needsReviewTrades} tone="warning" />
             <HeroMetric label="System alerts" value={metrics.systemAlerts} tone="warning" />
@@ -1740,30 +1834,6 @@ function getStatusClass(tone: "danger" | "healthy" | "neutral" | "warning") {
   }
 
   return getToneClass(tone);
-}
-
-function getHeroNarrative({
-  heroScore,
-  todayTrades,
-  violations,
-}: {
-  heroScore: number;
-  todayTrades: number;
-  violations: number;
-}) {
-  if (!todayTrades) {
-    return "No trades logged today. Use this calm window to review your plan before the next setup.";
-  }
-
-  if (heroScore >= 80 && violations === 0) {
-    return "Strong discipline profile today. Keep the same patience and repeatable process.";
-  }
-
-  if (violations > 0) {
-    return "There are rule breaks to review. Slow the next decision down and protect the plan.";
-  }
-
-  return "Execution is forming. Review the latest decisions and tighten any weak checklist items.";
 }
 
 function truncateText(value: string, length: number) {
