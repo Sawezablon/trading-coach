@@ -4,18 +4,21 @@ Qyvex is the parent brand. Qyvex Edge is the first product: an MVP SaaS app for 
 
 Qyvex Edge is not a trading bot, signal provider, prediction platform, broker integration, or copy-trading tool. It is a discipline assistant, AI trading journal, rule violation detector, and execution coach.
 
-## MVP Features
+## V1.0 Features
 
 - Supabase Auth signup/login flow
 - Protected dashboard shell
-- Dashboard metrics for open trades, closed trades, win rate, rule violations, discipline, and P/L
+- Adaptive command center with review mode, risk mode, account health, and next-best action
+- Dashboard analytics for discipline, rule pressure, monthly plan tracking, review debt, risk efficiency, and P/L
 - Trade journal with trade details, edit, close, outcome, and delete flows
 - Chart screenshot upload flow with trade notes, pair, risk, RR, session, selected emotions, and confirmation status
-- Rules settings for max risk, minimum RR, allowed sessions, allowed pairs, confirmation requirement, strict mode, and max trades per day
-- Deterministic rule engine for checklist pass/fail checks
+- Rules settings for system checks and user checklist rules
+- Performance Plan settings for monthly targets, drawdown limits, trade caps, and review standards
+- Deterministic rule engine for checklist pass/fail and MT5 system-review checks
+- MT5 read-only sync foundation with multi-account support, duplicate protection, manual resync requests, and imported-trade review workflow
 - AI analysis pipeline using OpenAI when configured
 - Mock AI responses when `OPENAI_API_KEY` is missing
-- Supabase schema for `profiles`, `trades`, `trading_rules`, and `ai_analysis`
+- Supabase schema for `profiles`, `trades`, `trading_rules`, `performance_plans`, `ai_analysis`, `mt5_connections`, and `mt5_sync_requests`
 
 ## Tech Stack
 
@@ -91,15 +94,21 @@ This creates and updates:
 - `profiles`
 - `trades`
 - `trading_rules`
+- `performance_plans`
 - `ai_analysis`
+- `mt5_connections`
+- `mt5_sync_requests`
 - chart screenshot storage policies
 - trade lifecycle fields
 - trade timezone support
 - checklist fields
+- MT5 sync fields, risk estimation fields, and system review data
+- selected MT5 account context
+- performance plan targets
 - `updated_at` triggers
 - Row Level Security policies
 - indexes for user-owned dashboard and journal queries
-- an auth trigger that creates a `profiles` row and default `trading_rules` row when a user signs up
+- an auth trigger that creates a `profiles` row, default `trading_rules`, and default `performance_plans` row when a user signs up
 
 If you prefer the dashboard SQL editor, paste and run [supabase/schema.sql](./supabase/schema.sql) instead.
 
@@ -173,10 +182,55 @@ Add `OPENAI_API_KEY` to enable OpenAI analysis. Without it, Qyvex Edge returns d
 
 ```bash
 npx tsc --noEmit
+npm run lint -- --no-errors-on-unmatched
 npm run build
 ```
 
 This Windows workspace currently needs Webpack mode for Next builds, so the build script uses `next build --webpack`.
+
+## V1.0 Release Checklist
+
+Before calling a deployment production-ready:
+
+1. Apply every Supabase migration through `supabase db push` or the dashboard SQL editor.
+2. Confirm the `performance_plans` table exists in Supabase. The dashboard can fall back to a default plan, but saving Performance Plan settings requires the table.
+3. Confirm the `chart-screenshots` bucket exists and is public for MVP previews.
+4. In Supabase Auth, set production redirect URLs:
+
+```text
+https://qyvexedge.com/**
+https://www.qyvexedge.com/**
+```
+
+5. In Vercel, set the production environment variables:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+OPENAI_API_KEY=
+NEXT_PUBLIC_APP_URL=https://qyvexedge.com
+NEXT_PUBLIC_MT5_SYNC_URL=https://sync.qyvexedge.com/api/mt5/sync
+```
+
+6. Confirm the MT5 sync domain is configured in Vercel and DNS:
+
+```text
+https://sync.qyvexedge.com
+```
+
+7. Smoke test the core flow:
+
+- Create account
+- Log out and log back in
+- Generate MT5 connection key
+- Sync MT5 trades through the EA
+- Confirm imported trades appear in Journal
+- Review an imported trade
+- Set Trading Rules
+- Set Performance Plan
+- Confirm Dashboard loads without server errors
+- Delete a test trade
 
 ## MT5 Sync Developer Test
 

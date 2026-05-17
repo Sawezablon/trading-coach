@@ -642,7 +642,6 @@ export default async function Page() {
   });
   const performancePlan = getActivePerformancePlan(performancePlans, selectedConnectionId);
   const model = getDashboardModel(trades, performancePlan);
-  const { metrics } = model;
 
   return (
     <div className="flex flex-col gap-6 pb-8">
@@ -1334,7 +1333,7 @@ function TradingTimeline({
                 <Badge variant="outline">{event.badge}</Badge>
               </div>
               <div className="mt-1 text-muted-foreground text-xs">{event.detail}</div>
-              <div className="mt-2 text-muted-foreground text-[11px]">{event.timeLabel}</div>
+              <div className="mt-2 text-[11px] text-muted-foreground">{event.timeLabel}</div>
             </div>
           </Link>
         ))}
@@ -1645,20 +1644,30 @@ function TrendDots({ scores }: { scores: number[] }) {
     return <div className="mt-3 text-muted-foreground text-xs">No trade scores yet.</div>;
   }
 
+  const seenScores = new Map<number, number>();
+  const dots = scores.map((score) => {
+    const occurrence = seenScores.get(score) ?? 0;
+    seenScores.set(score, occurrence + 1);
+    return {
+      key: `${score}-${occurrence}`,
+      score,
+    };
+  });
+
   return (
     <div className="mt-3 flex items-end gap-1.5">
-      {scores.map((score, index) => (
+      {dots.map((dot) => (
         <div
-          key={`${score}-${index}`}
+          key={dot.key}
           className={
-            score >= 80
+            dot.score >= 80
               ? "h-8 flex-1 rounded-full bg-[#22C55E]/80"
-              : score >= 60
+              : dot.score >= 60
                 ? "h-8 flex-1 rounded-full bg-primary/80"
                 : "h-8 flex-1 rounded-full bg-[#F59E0B]/80"
           }
-          style={{ opacity: Math.max(0.35, score / 100) }}
-          title={`${score}%`}
+          style={{ opacity: Math.max(0.35, dot.score / 100) }}
+          title={`${dot.score}%`}
         />
       ))}
     </div>
@@ -1898,7 +1907,7 @@ function PatternBlock({ items, title, value }: { items: CountItem[]; title: stri
         {items.length ? (
           items.map((item) => (
             <div key={item.label} className="flex items-center justify-between gap-3 text-sm">
-              <span className="truncate capitalize text-muted-foreground">{item.label}</span>
+              <span className="truncate text-muted-foreground capitalize">{item.label}</span>
               <span className="font-medium">{item.count}</span>
             </div>
           ))
@@ -1918,25 +1927,6 @@ function MiniEmptyState({ description, title }: { description: string; title: st
       </div>
       <div className="mt-3 font-medium">{title}</div>
       <p className="mt-1 max-w-xs text-muted-foreground text-sm">{description}</p>
-    </div>
-  );
-}
-
-function PremiumDisciplineBars({ data }: { data: { pair: string; discipline: number }[] }) {
-  return (
-    <div className="flex h-[260px] items-end gap-2 rounded-2xl border bg-secondary/25 p-4 sm:gap-3">
-      {data.map((item) => (
-        <div key={`${item.pair}-${item.discipline}`} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-          <div className="flex h-44 w-full items-end rounded-full bg-background/60 p-1">
-            <div
-              className="w-full rounded-full bg-gradient-to-t from-primary to-[#5EEAD4] shadow-[0_0_28px_rgb(124_92_255/0.22)] transition-all"
-              style={{ height: `${Math.max(8, Math.min(100, item.discipline))}%` }}
-            />
-          </div>
-          <div className="w-full truncate text-center text-muted-foreground text-xs">{item.pair}</div>
-          <div className="font-medium text-xs">{item.discipline}%</div>
-        </div>
-      ))}
     </div>
   );
 }

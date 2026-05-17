@@ -119,7 +119,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="border-y border-border/80 bg-secondary/40 px-6 py-10 lg:px-14">
+      <section className="border-border/80 border-y bg-secondary/40 px-6 py-10 lg:px-14">
         <div className="mx-auto grid max-w-7xl gap-4 md:grid-cols-3">
           {metrics.map((metric) => (
             <div key={metric.label} className="rounded-2xl border bg-card/50 p-5">
