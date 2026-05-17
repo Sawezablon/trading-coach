@@ -141,6 +141,10 @@ function formatSignedMoney(value: number) {
   return `${rounded > 0 ? "+" : ""}${rounded}`;
 }
 
+function formatUnsignedPercent(value: number) {
+  return `${Number(Math.abs(value).toFixed(2))}%`;
+}
+
 function getMonthLabel(date = new Date()) {
   return new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(date);
 }
@@ -192,22 +196,27 @@ function getLosingStreak(trades: TradeWithAnalysis[]) {
 
 function buildPairPerformance(trades: TradeWithAnalysis[]) {
   return Object.values(
-    trades.reduce<Record<string, { label: string; profit: number; trades: number; wins: number; losses: number }>>(
-      (pairs, trade) => {
-        const label = trade.pair || "Unknown";
-        pairs[label] ??= { label, losses: 0, profit: 0, trades: 0, wins: 0 };
-        pairs[label].trades += 1;
-        pairs[label].profit += Number(trade.profit_loss_amount ?? 0);
-        if (trade.outcome === "win") {
-          pairs[label].wins += 1;
-        }
-        if (trade.outcome === "loss") {
-          pairs[label].losses += 1;
-        }
-        return pairs;
-      },
-      {},
-    ),
+    trades.reduce<
+      Record<
+        string,
+        { label: string; losses: number; profit: number; rulePressureTrades: number; trades: number; wins: number }
+      >
+    >((pairs, trade) => {
+      const label = trade.pair || "Unknown";
+      pairs[label] ??= { label, losses: 0, profit: 0, rulePressureTrades: 0, trades: 0, wins: 0 };
+      pairs[label].trades += 1;
+      pairs[label].profit += Number(trade.profit_loss_amount ?? 0);
+      if (tradeHasRulePressure(trade)) {
+        pairs[label].rulePressureTrades += 1;
+      }
+      if (trade.outcome === "win") {
+        pairs[label].wins += 1;
+      }
+      if (trade.outcome === "loss") {
+        pairs[label].losses += 1;
+      }
+      return pairs;
+    }, {}),
   ).sort((left, right) => right.profit - left.profit);
 }
 
@@ -314,6 +323,7 @@ function getMonthlyPerformanceModel(trades: TradeWithAnalysis[], plan: Performan
         : "Monthly target is reached. The priority is capital protection and clean execution.";
   const dataConfidence =
     reviewCompletion >= plan.min_review_completion_percent ? "High" : reviewCompletion > 0 ? "Medium" : "Low";
+  const dataConfidenceReason = `${reviewedTrades}/${monthTrades.length} trades reviewed`;
   const riskEfficiencyInsight =
     expectancy < 0 && avgWinPercent > avgLossPercent
       ? "Average win is bigger than average loss, but win rate is below plan."
@@ -342,6 +352,7 @@ function getMonthlyPerformanceModel(trades: TradeWithAnalysis[], plan: Performan
     breakevens,
     closedTrades: closedTrades.length,
     dataConfidence,
+    dataConfidenceReason,
     expectancy,
     insight,
     lossProgress,
@@ -860,6 +871,7 @@ function PerformanceAnalytics({ model }: { model: ReturnType<typeof getDashboard
   const { monthlyPerformance } = model;
   const plan = monthlyPerformance.plan;
   const isDamageControl = monthlyPerformance.status.tone === "danger";
+  const riskReason = monthlyPerformance.planRiskReasons[0] ?? "Your plan limits are under pressure";
 
   return (
     <Card className="xl:col-span-7">
@@ -884,7 +896,10 @@ function PerformanceAnalytics({ model }: { model: ReturnType<typeof getDashboard
               <Badge className={getStatusClass(monthlyPerformance.status.tone)}>
                 {monthlyPerformance.status.label}
               </Badge>
-              <div className="mt-3 font-semibold text-2xl tracking-tight">{monthlyPerformance.insight}</div>
+              <div className="mt-3 font-semibold text-2xl tracking-tight">
+                {isDamageControl ? "Stop chasing the target." : monthlyPerformance.insight}
+              </div>
+              {isDamageControl ? <p className="mt-1 font-medium text-destructive text-sm">{riskReason}.</p> : null}
               <p className="mt-2 text-muted-foreground text-sm">
                 Target: {formatSignedPercent(plan.monthly_profit_target_percent)} profit, {plan.max_trades_per_month}{" "}
                 max trades,
@@ -903,12 +918,16 @@ function PerformanceAnalytics({ model }: { model: ReturnType<typeof getDashboard
               progress={monthlyPerformance.tradeProgress}
             />
             <PlanProgress
-              label="Profit target"
-              value={`${formatSignedPercent(monthlyPerformance.profitPercent)} / ${plan.monthly_profit_target_percent}%`}
+              label={isDamageControl ? "Monthly return" : "Profit target"}
+              value={
+                isDamageControl
+                  ? formatSignedPercent(monthlyPerformance.profitPercent)
+                  : `${formatSignedPercent(monthlyPerformance.profitPercent)} / ${plan.monthly_profit_target_percent}%`
+              }
               progress={monthlyPerformance.profitProgress}
             />
             <PlanProgress
-              label="Drawdown pressure"
+              label={isDamageControl ? "Loss limit used" : "Drawdown pressure"}
               value={`${formatSignedPercent(Math.min(monthlyPerformance.profitPercent, 0))} / -${plan.max_monthly_loss_percent}%`}
               progress={monthlyPerformance.lossProgress}
               tone="danger"
@@ -937,15 +956,13 @@ function PerformanceAnalytics({ model }: { model: ReturnType<typeof getDashboard
 
         {isDamageControl ? (
           <>
-            <DamageControlPanel monthlyPerformance={monthlyPerformance} />
             <WhyItHappenedPanel monthlyPerformance={monthlyPerformance} />
-            <div className="flex flex-col gap-3 rounded-2xl border border-destructive/20 bg-destructive/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <DamageControlPanel monthlyPerformance={monthlyPerformance} />
+            <div className="flex flex-col gap-3 rounded-2xl border border-destructive/25 bg-secondary/35 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <div className="font-semibold">
-                  You are losing because rule-pressure trades are dragging the account.
-                </div>
+                <div className="font-semibold">Rule-pressure trades are causing the damage.</div>
                 <p className="mt-1 text-muted-foreground text-sm">
-                  Stop chasing the target. Review first, then only take A+ setups at reduced risk.
+                  Review the losing streak before taking another setup.
                 </p>
               </div>
               <Button asChild size="sm" variant="outline">
@@ -1436,7 +1453,7 @@ function DamageControlPanel({
 
   return (
     <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr]">
-      <div className="rounded-2xl border border-destructive/20 bg-destructive/10 p-4">
+      <div className="rounded-2xl border border-destructive/25 bg-secondary/35 p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="font-medium">Damage control</div>
@@ -1452,8 +1469,8 @@ function DamageControlPanel({
           />
           <PlanTile label="Next trade mode" value="Reduced risk / A+ only" />
           <PlanTile
-            label="Safe remaining risk"
-            value={formatSignedPercent(monthlyPerformance.safeRemainingRiskPercent)}
+            label="Loss buffer left"
+            value={formatUnsignedPercent(monthlyPerformance.safeRemainingRiskPercent)}
           />
         </div>
       </div>
@@ -1475,7 +1492,10 @@ function WhyItHappenedPanel({
           <div className="font-medium">Why it happened</div>
           <p className="mt-1 text-muted-foreground text-sm">{monthlyPerformance.performanceCause}</p>
         </div>
-        <Badge variant="outline">Confidence: {monthlyPerformance.dataConfidence}</Badge>
+        <div className="rounded-2xl border bg-background/40 px-3 py-2 text-sm">
+          <div className="font-medium">Confidence: {monthlyPerformance.dataConfidence}</div>
+          <div className="text-muted-foreground text-xs">{monthlyPerformance.dataConfidenceReason}</div>
+        </div>
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-4">
         <PlanTile
@@ -1542,10 +1562,14 @@ function PlanProgress({
 }
 
 function PlanTile({ label, value }: { label: string; value: number | string }) {
+  const isLongText = typeof value === "string" && value.length > 24;
+
   return (
     <div className="rounded-2xl border bg-background/35 p-3">
       <div className="text-muted-foreground text-xs">{label}</div>
-      <div className="mt-1 font-semibold text-xl">{value}</div>
+      <div className={isLongText ? "mt-1 font-semibold text-sm leading-snug" : "mt-1 font-semibold text-xl"}>
+        {value}
+      </div>
     </div>
   );
 }
@@ -1589,12 +1613,12 @@ function PerformanceQualityCard({
 function PairPerformanceRow({
   pair,
 }: {
-  pair: { label: string; losses: number; profit: number; trades: number; wins: number };
+  pair: { label: string; losses: number; profit: number; rulePressureTrades: number; trades: number; wins: number };
 }) {
   const winRate = pair.trades ? Math.round((pair.wins / pair.trades) * 100) : 0;
 
   return (
-    <div className="grid gap-3 rounded-2xl border bg-secondary/35 p-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center">
+    <div className="grid gap-3 rounded-2xl border bg-secondary/35 p-3 sm:grid-cols-[1fr_auto_auto_auto_auto] sm:items-center">
       <div>
         <div className="font-medium">{pair.label}</div>
         <div className="text-muted-foreground text-xs">
@@ -1602,6 +1626,9 @@ function PairPerformanceRow({
         </div>
       </div>
       <Badge variant="outline">{winRate}% WR</Badge>
+      <Badge variant="outline">
+        {pair.rulePressureTrades} rule-pressure trade{pair.rulePressureTrades === 1 ? "" : "s"}
+      </Badge>
       <Badge className={pair.profit >= 0 ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-destructive/10 text-destructive"}>
         {formatSignedMoney(pair.profit)}
       </Badge>
