@@ -22,6 +22,25 @@ export const demoPerformancePlan: PerformancePlan = {
   updated_at: new Date().toISOString(),
 };
 
+function getDefaultPerformancePlan(userId: string): PerformancePlan {
+  return {
+    ...demoPerformancePlan,
+    user_id: userId,
+  };
+}
+
+function isMissingPerformancePlansTable(error: { code?: string; message?: string }) {
+  const message = error.message?.toLowerCase() ?? "";
+
+  return (
+    error.code === "42P01" ||
+    error.code === "PGRST205" ||
+    error.code === "PGRST204" ||
+    message.includes("performance_plans") ||
+    message.includes("schema cache")
+  );
+}
+
 export async function getPerformancePlans(): Promise<PerformancePlan[]> {
   const user = await getSessionUser();
   const supabase = await createSupabaseServerClient();
@@ -37,6 +56,10 @@ export async function getPerformancePlans(): Promise<PerformancePlan[]> {
     .order("mt5_connection_id", { ascending: true, nullsFirst: true });
 
   if (error) {
+    if (isMissingPerformancePlansTable(error)) {
+      return [getDefaultPerformancePlan(user.id)];
+    }
+
     throw new Error(error.message);
   }
 
@@ -51,6 +74,10 @@ export async function getPerformancePlans(): Promise<PerformancePlan[]> {
     .single();
 
   if (createError) {
+    if (isMissingPerformancePlansTable(createError)) {
+      return [getDefaultPerformancePlan(user.id)];
+    }
+
     throw new Error(createError.message);
   }
 
