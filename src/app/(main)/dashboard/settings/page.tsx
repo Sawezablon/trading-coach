@@ -29,9 +29,14 @@ export default async function SettingsPage({
       </div>
 
       <div>
-        <Button asChild variant="outline">
-          <Link href="/dashboard/settings/mt5">MT5 Sync settings</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/dashboard/settings/performance">Performance plan</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/dashboard/settings/mt5">MT5 Sync settings</Link>
+          </Button>
+        </div>
       </div>
 
       {params.saved ? (

@@ -54,9 +54,14 @@ export default async function Mt5SyncSettingsPage() {
             Connect the read-only MetaTrader 5 Expert Advisor to import your trade history into {APP_CONFIG.name}.
           </p>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/dashboard/settings">Trading rules</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/dashboard/settings">Trading rules</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/dashboard/settings/performance">Performance plan</Link>
+          </Button>
+        </div>
       </div>
 
       <Mt5SyncPanel connections={connections} pendingRequests={pendingRequests} syncUrl={syncUrl} />

@@ -149,6 +149,25 @@ create table if not exists public.mt5_sync_requests (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.performance_plans (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  mt5_connection_id uuid references public.mt5_connections(id) on delete cascade,
+  name text not null default 'Default monthly plan',
+  monthly_profit_target_percent numeric(6,2) not null default 6 check (monthly_profit_target_percent >= 0),
+  max_monthly_loss_percent numeric(6,2) not null default 6 check (max_monthly_loss_percent >= 0),
+  max_trades_per_month integer not null default 10 check (max_trades_per_month >= 0),
+  target_win_rate_percent numeric(5,2) not null default 40 check (target_win_rate_percent between 0 and 100),
+  target_rr numeric(6,2) not null default 3 check (target_rr >= 0),
+  risk_per_trade_percent numeric(5,2) not null default 1 check (risk_per_trade_percent >= 0),
+  max_losses_per_month integer not null default 6 check (max_losses_per_month >= 0),
+  max_losing_streak integer not null default 3 check (max_losing_streak >= 0),
+  max_daily_loss_percent numeric(6,2) not null default 3 check (max_daily_loss_percent >= 0),
+  min_review_completion_percent numeric(5,2) not null default 80 check (min_review_completion_percent between 0 and 100),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.trades
   drop constraint if exists trades_mt5_connection_id_fkey;
 
@@ -188,6 +207,10 @@ create unique index if not exists mt5_connections_active_account_broker_unique o
 create index if not exists mt5_sync_requests_user_created_idx on public.mt5_sync_requests(user_id, created_at desc);
 create index if not exists mt5_sync_requests_connection_status_idx on public.mt5_sync_requests(mt5_connection_id, status, created_at desc);
 create unique index if not exists mt5_sync_requests_one_pending_per_connection_idx on public.mt5_sync_requests(mt5_connection_id) where mt5_connection_id is not null and status = 'pending';
+create index if not exists performance_plans_user_id_idx on public.performance_plans(user_id);
+create index if not exists performance_plans_connection_idx on public.performance_plans(user_id, mt5_connection_id);
+create unique index if not exists performance_plans_default_unique on public.performance_plans(user_id) where mt5_connection_id is null;
+create unique index if not exists performance_plans_connection_unique on public.performance_plans(user_id, mt5_connection_id) where mt5_connection_id is not null;
 
 drop trigger if exists set_profiles_updated_at on public.profiles;
 create trigger set_profiles_updated_at
@@ -219,12 +242,18 @@ create trigger set_mt5_sync_requests_updated_at
   before update on public.mt5_sync_requests
   for each row execute function public.set_updated_at();
 
+drop trigger if exists set_performance_plans_updated_at on public.performance_plans;
+create trigger set_performance_plans_updated_at
+  before update on public.performance_plans
+  for each row execute function public.set_updated_at();
+
 alter table public.profiles enable row level security;
 alter table public.trading_rules enable row level security;
 alter table public.trades enable row level security;
 alter table public.ai_analysis enable row level security;
 alter table public.mt5_connections enable row level security;
 alter table public.mt5_sync_requests enable row level security;
+alter table public.performance_plans enable row level security;
 
 drop policy if exists "Profiles are self-owned" on public.profiles;
 create policy "Profiles are self-owned" on public.profiles
@@ -262,6 +291,12 @@ create policy "MT5 sync requests are self-owned" on public.mt5_sync_requests
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+drop policy if exists "Performance plans are self-owned" on public.performance_plans;
+create policy "Performance plans are self-owned" on public.performance_plans
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -277,6 +312,10 @@ begin
   insert into public.trading_rules (user_id)
   values (new.id)
   on conflict (user_id) do nothing;
+
+  insert into public.performance_plans (user_id)
+  values (new.id)
+  on conflict do nothing;
 
   return new;
 end;

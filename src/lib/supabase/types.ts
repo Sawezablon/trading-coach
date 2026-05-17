@@ -144,6 +144,25 @@ export type Mt5SyncRequest = {
   updated_at: string;
 };
 
+export type PerformancePlan = {
+  id: string;
+  user_id: string;
+  mt5_connection_id: string | null;
+  name: string;
+  monthly_profit_target_percent: number;
+  max_monthly_loss_percent: number;
+  max_trades_per_month: number;
+  target_win_rate_percent: number;
+  target_rr: number;
+  risk_per_trade_percent: number;
+  max_losses_per_month: number;
+  max_losing_streak: number;
+  max_daily_loss_percent: number;
+  min_review_completion_percent: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ChecklistItemResult = {
   id: string;
   label: string;
@@ -238,6 +257,12 @@ export type Database = {
         Row: Mt5SyncRequest;
         Insert: Partial<Mt5SyncRequest> & Pick<Mt5SyncRequest, "user_id" | "lookback_days">;
         Update: Partial<Mt5SyncRequest>;
+        Relationships: [];
+      };
+      performance_plans: {
+        Row: PerformancePlan;
+        Insert: Partial<PerformancePlan> & Pick<PerformancePlan, "user_id">;
+        Update: Partial<PerformancePlan>;
         Relationships: [];
       };
     };

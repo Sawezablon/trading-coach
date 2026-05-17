@@ -56,6 +56,10 @@ export const sidebarItems: NavGroup[] = [
             url: "/dashboard/settings",
           },
           {
+            title: "Performance Plan",
+            url: "/dashboard/settings/performance",
+          },
+          {
             title: "MT5 Sync",
             url: "/dashboard/settings/mt5",
             icon: Database,

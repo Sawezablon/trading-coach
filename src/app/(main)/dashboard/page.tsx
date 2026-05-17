@@ -10,11 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { getMt5AccountContext, type Mt5ConnectionStatus } from "@/lib/data/mt5";
+import { getActivePerformancePlan, getPerformancePlans } from "@/lib/data/performance-plans";
 import { calculateDashboardMetrics, getPrimaryAnalysis, getTrades } from "@/lib/data/trades";
 import { getEmotionRisk, parseEmotionValues } from "@/lib/emotions";
 import { formatTradeDateTime } from "@/lib/format-trade-time";
 import { getMt5ConnectionLabel } from "@/lib/mt5-label";
-import type { TradeWithAnalysis } from "@/lib/supabase/types";
+import type { PerformancePlan, TradeWithAnalysis } from "@/lib/supabase/types";
 import { getSystemReviewItems, getSystemReviewScore } from "@/lib/system-review";
 
 export const dynamic = "force-dynamic";
@@ -124,6 +125,206 @@ function countBy(items: string[]) {
   )
     .map(([label, count]) => ({ label, count }))
     .sort((left, right) => right.count - left.count);
+}
+
+function clamp(value: number, min = 0, max = 100) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function formatSignedPercent(value: number) {
+  const rounded = Number(value.toFixed(2));
+  return `${rounded > 0 ? "+" : ""}${rounded}%`;
+}
+
+function formatSignedMoney(value: number) {
+  const rounded = Number(value.toFixed(2));
+  return `${rounded > 0 ? "+" : ""}${rounded}`;
+}
+
+function getMonthLabel(date = new Date()) {
+  return new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(date);
+}
+
+function isCurrentMonth(value: string) {
+  const date = new Date(value);
+  const now = new Date();
+
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+}
+
+function getTradeProfitPercent(trade: TradeWithAnalysis) {
+  if (trade.profit_loss_percent !== null) {
+    return Number(trade.profit_loss_percent);
+  }
+
+  const balance = Number(trade.account_balance_at_sync ?? 0);
+  const profit = Number(trade.profit_loss_amount ?? 0);
+
+  return balance > 0 ? (profit / balance) * 100 : 0;
+}
+
+function tradeHasRulePressure(trade: TradeWithAnalysis) {
+  const systemItems = getSystemReviewItems(trade.system_analysis);
+  const hasSystemAlert = systemItems.some((item) => item.status === "failed" || item.status === "warning");
+  const hasFailedRules = (trade.failed_rules?.length ?? 0) > 0;
+  const hasAiViolations = (getPrimaryAnalysis(trade)?.rule_violations.length ?? 0) > 0;
+
+  return hasSystemAlert || hasFailedRules || hasAiViolations;
+}
+
+function getLosingStreak(trades: TradeWithAnalysis[]) {
+  let streak = 0;
+
+  for (const trade of trades) {
+    if (trade.status !== "closed") {
+      continue;
+    }
+
+    if (trade.outcome !== "loss") {
+      break;
+    }
+
+    streak += 1;
+  }
+
+  return streak;
+}
+
+function buildPairPerformance(trades: TradeWithAnalysis[]) {
+  return Object.values(
+    trades.reduce<Record<string, { label: string; profit: number; trades: number; wins: number; losses: number }>>(
+      (pairs, trade) => {
+        const label = trade.pair || "Unknown";
+        pairs[label] ??= { label, losses: 0, profit: 0, trades: 0, wins: 0 };
+        pairs[label].trades += 1;
+        pairs[label].profit += Number(trade.profit_loss_amount ?? 0);
+        if (trade.outcome === "win") {
+          pairs[label].wins += 1;
+        }
+        if (trade.outcome === "loss") {
+          pairs[label].losses += 1;
+        }
+        return pairs;
+      },
+      {},
+    ),
+  ).sort((left, right) => right.profit - left.profit);
+}
+
+function getMonthlyPerformanceModel(trades: TradeWithAnalysis[], plan: PerformancePlan) {
+  const monthTrades = trades.filter((trade) => isCurrentMonth(trade.trade_taken_at));
+  const closedTrades = monthTrades.filter((trade) => trade.status === "closed");
+  const wins = closedTrades.filter((trade) => trade.outcome === "win").length;
+  const losses = closedTrades.filter((trade) => trade.outcome === "loss").length;
+  const breakevens = closedTrades.filter((trade) => trade.outcome === "breakeven").length;
+  const openTrades = monthTrades.filter((trade) => trade.status === "open").length;
+  const winRate = closedTrades.length ? Math.round((wins / closedTrades.length) * 100) : 0;
+  const profitAmount = Number(
+    closedTrades.reduce((sum, trade) => sum + Number(trade.profit_loss_amount ?? 0), 0).toFixed(2),
+  );
+  const profitPercent = Number(closedTrades.reduce((sum, trade) => sum + getTradeProfitPercent(trade), 0).toFixed(2));
+  const tradeProgress = plan.max_trades_per_month ? clamp((monthTrades.length / plan.max_trades_per_month) * 100) : 0;
+  const profitProgress = plan.monthly_profit_target_percent
+    ? clamp((profitPercent / plan.monthly_profit_target_percent) * 100)
+    : 0;
+  const lossProgress = plan.max_monthly_loss_percent
+    ? clamp((Math.abs(Math.min(profitPercent, 0)) / plan.max_monthly_loss_percent) * 100)
+    : 0;
+  const reviewCompletion = monthTrades.length
+    ? Math.round((monthTrades.filter((trade) => trade.review_status === "reviewed").length / monthTrades.length) * 100)
+    : 0;
+  const tradesRemaining = Math.max(0, plan.max_trades_per_month - monthTrades.length);
+  const lossesRemaining = Math.max(0, plan.max_losses_per_month - losses);
+  const profitGap = Number(Math.max(0, plan.monthly_profit_target_percent - profitPercent).toFixed(2));
+  const estimatedWinPercent = plan.risk_per_trade_percent * plan.target_rr;
+  const winsNeeded = estimatedWinPercent > 0 ? Math.ceil(profitGap / estimatedWinPercent) : 0;
+  const avgWinPercent = wins
+    ? closedTrades
+        .filter((trade) => trade.outcome === "win")
+        .reduce((sum, trade) => sum + getTradeProfitPercent(trade), 0) / wins
+    : 0;
+  const avgLossPercent = losses
+    ? Math.abs(
+        closedTrades
+          .filter((trade) => trade.outcome === "loss")
+          .reduce((sum, trade) => sum + getTradeProfitPercent(trade), 0) / losses,
+      )
+    : 0;
+  const expectancy = Number(
+    closedTrades.length ? ((winRate / 100) * avgWinPercent - ((100 - winRate) / 100) * avgLossPercent).toFixed(2) : 0,
+  );
+  const ruleFollowingProfit = Number(
+    closedTrades
+      .filter((trade) => !tradeHasRulePressure(trade))
+      .reduce((sum, trade) => sum + Number(trade.profit_loss_amount ?? 0), 0)
+      .toFixed(2),
+  );
+  const rulePressureProfit = Number(
+    closedTrades
+      .filter(tradeHasRulePressure)
+      .reduce((sum, trade) => sum + Number(trade.profit_loss_amount ?? 0), 0)
+      .toFixed(2),
+  );
+  const losingStreak = getLosingStreak(monthTrades);
+  const pairPerformance = buildPairPerformance(closedTrades);
+  const bestPair = pairPerformance[0];
+  const worstPair = [...pairPerformance].sort((left, right) => left.profit - right.profit)[0];
+  const isPlanBroken =
+    (plan.max_monthly_loss_percent > 0 && profitPercent <= -plan.max_monthly_loss_percent) ||
+    (plan.max_trades_per_month > 0 && monthTrades.length > plan.max_trades_per_month) ||
+    (plan.max_losses_per_month > 0 && losses > plan.max_losses_per_month) ||
+    (plan.max_losing_streak > 0 && losingStreak >= plan.max_losing_streak);
+  const isBehind = profitProgress + 15 < tradeProgress || winRate + 5 < plan.target_win_rate_percent;
+  const status = !monthTrades.length
+    ? { label: "Ready", tone: "neutral" as const }
+    : isPlanBroken
+      ? { label: "Plan at risk", tone: "danger" as const }
+      : profitProgress >= 100
+        ? { label: "Target hit", tone: "healthy" as const }
+        : isBehind
+          ? { label: "Behind", tone: "warning" as const }
+          : { label: "On track", tone: "healthy" as const };
+  const insight = !monthTrades.length
+    ? "Set the plan, take only qualified trades, then Qyvex will track the month automatically."
+    : isPlanBroken
+      ? "Protect the account first. Your plan limits are under pressure."
+      : profitGap > 0
+        ? `You need ${formatSignedPercent(profitGap)} from ${tradesRemaining} remaining planned trade${tradesRemaining === 1 ? "" : "s"}.`
+        : "Monthly target is reached. The priority is capital protection and clean execution.";
+
+  return {
+    avgLossPercent,
+    avgWinPercent,
+    bestPair,
+    breakevens,
+    closedTrades: closedTrades.length,
+    expectancy,
+    insight,
+    lossProgress,
+    losses,
+    lossesRemaining,
+    losingStreak,
+    monthLabel: getMonthLabel(),
+    openTrades,
+    pairPerformance,
+    plan,
+    profitAmount,
+    profitGap,
+    profitPercent,
+    profitProgress,
+    reviewCompletion,
+    ruleFollowingProfit,
+    rulePressureProfit,
+    status,
+    targetWinRate: plan.target_win_rate_percent,
+    tradeProgress,
+    tradesRemaining,
+    totalTrades: monthTrades.length,
+    winRate,
+    wins,
+    winsNeeded,
+    worstPair,
+  };
 }
 
 function getTrendLabel(scores: number[]) {
@@ -283,7 +484,7 @@ function getDisciplineIntelligence({
   };
 }
 
-function getDashboardModel(trades: TradeWithAnalysis[]) {
+function getDashboardModel(trades: TradeWithAnalysis[], performancePlan: PerformancePlan) {
   const metrics = calculateDashboardMetrics(trades);
   const todayTrades = trades.filter((trade) => isToday(trade.trade_taken_at));
   const todayDiscipline = average(todayTrades.map(getTradeDiscipline));
@@ -320,6 +521,7 @@ function getDashboardModel(trades: TradeWithAnalysis[]) {
     reviewCompletion,
     trades,
   });
+  const monthlyPerformance = getMonthlyPerformanceModel(trades, performancePlan);
 
   return {
     behaviorState,
@@ -330,6 +532,7 @@ function getDashboardModel(trades: TradeWithAnalysis[]) {
     failedRuleCounts,
     highRiskEmotionTrades,
     metrics,
+    monthlyPerformance,
     mostFailedRule,
     reviewCompletion,
     ruleAdherence,
@@ -343,21 +546,19 @@ function getDashboardModel(trades: TradeWithAnalysis[]) {
 export default async function Page() {
   noStore();
 
-  const [allTrades, accountContext] = await Promise.all([getTrades(), getMt5AccountContext()]);
+  const [allTrades, accountContext, performancePlans] = await Promise.all([
+    getTrades(),
+    getMt5AccountContext(),
+    getPerformancePlans(),
+  ]);
   const { connections, selectedConnection, selectedConnectionId } = accountContext;
   const trades = getFilteredTrades({
     selectedConnectionId,
     trades: allTrades,
   });
-  const model = getDashboardModel(trades);
+  const performancePlan = getActivePerformancePlan(performancePlans, selectedConnectionId);
+  const model = getDashboardModel(trades, performancePlan);
   const { metrics } = model;
-  const chartData = trades
-    .slice(0, 8)
-    .reverse()
-    .map((trade) => ({
-      pair: trade.pair,
-      discipline: getTradeDiscipline(trade),
-    }));
 
   return (
     <div className="flex flex-col gap-6 pb-8">
@@ -375,7 +576,7 @@ export default async function Page() {
         <>
           <section className="grid gap-4 xl:grid-cols-12">
             <DisciplineIntelligence model={model} />
-            <PerformanceAnalytics chartData={chartData} model={model} />
+            <PerformanceAnalytics model={model} />
           </section>
 
           <section className="grid gap-4 xl:grid-cols-12">
@@ -602,14 +803,9 @@ function DisciplineIntelligence({ model }: { model: ReturnType<typeof getDashboa
   );
 }
 
-function PerformanceAnalytics({
-  chartData,
-  model,
-}: {
-  chartData: { pair: string; discipline: number }[];
-  model: ReturnType<typeof getDashboardModel>;
-}) {
-  const { metrics } = model;
+function PerformanceAnalytics({ model }: { model: ReturnType<typeof getDashboardModel> }) {
+  const { monthlyPerformance } = model;
+  const plan = monthlyPerformance.plan;
 
   return (
     <Card className="xl:col-span-7">
@@ -617,26 +813,153 @@ function PerformanceAnalytics({
         <SectionEyebrow icon={<IconMark text="PA" />}>Performance Analytics</SectionEyebrow>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <CardTitle>Performance without losing the plot</CardTitle>
-            <CardDescription>Outcome metrics are useful, but only after behavior is clear.</CardDescription>
+            <CardTitle>{monthlyPerformance.monthLabel} plan tracker</CardTitle>
+            <CardDescription>Performance measured against the trading plan, not just wins and losses.</CardDescription>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
-            <MiniMetric label="Closed" value={metrics.closedTrades} />
-            <MiniMetric label="Avg RR" value={`${metrics.averageFinalRr}R`} />
-            <MiniMetric label="P/L" value={metrics.totalProfitLoss} />
+            <MiniMetric label="Status" value={monthlyPerformance.status.label} />
+            <MiniMetric label="Profit" value={formatSignedPercent(monthlyPerformance.profitPercent)} />
+            <MiniMetric label="Trades" value={`${monthlyPerformance.totalTrades}/${plan.max_trades_per_month}`} />
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {chartData.length ? (
-          <PremiumDisciplineBars data={chartData} />
-        ) : (
-          <MiniEmptyState title="No trend yet" description="Review trades to build a discipline trend." />
-        )}
-        <div className="grid gap-3 sm:grid-cols-3">
-          <OutcomeTile label="Wins" value={metrics.wins} className="border-[#22C55E]/20 bg-[#22C55E]/10" />
-          <OutcomeTile label="Losses" value={metrics.losses} className="border-destructive/20 bg-destructive/10" />
-          <OutcomeTile label="Breakevens" value={metrics.breakevens} className="border-[#F59E0B]/20 bg-[#F59E0B]/10" />
+      <CardContent className="space-y-5">
+        <div className="rounded-3xl border border-primary/20 bg-[linear-gradient(135deg,rgb(124_92_255/0.16),rgb(94_234_212/0.05))] p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <Badge className={getStatusClass(monthlyPerformance.status.tone)}>
+                {monthlyPerformance.status.label}
+              </Badge>
+              <div className="mt-3 font-semibold text-2xl tracking-tight">{monthlyPerformance.insight}</div>
+              <p className="mt-2 text-muted-foreground text-sm">
+                Target: {formatSignedPercent(plan.monthly_profit_target_percent)} profit, {plan.max_trades_per_month}{" "}
+                max trades,
+                {` ${plan.target_win_rate_percent}%`} win rate, {plan.risk_per_trade_percent}% risk for {plan.target_rr}
+                R.
+              </p>
+            </div>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/dashboard/settings/performance">Edit plan</Link>
+            </Button>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <PlanProgress
+              label="Trades used"
+              value={`${monthlyPerformance.totalTrades}/${plan.max_trades_per_month}`}
+              progress={monthlyPerformance.tradeProgress}
+            />
+            <PlanProgress
+              label="Profit target"
+              value={`${formatSignedPercent(monthlyPerformance.profitPercent)} / ${plan.monthly_profit_target_percent}%`}
+              progress={monthlyPerformance.profitProgress}
+            />
+            <PlanProgress
+              label="Drawdown pressure"
+              value={`${formatSignedPercent(Math.min(monthlyPerformance.profitPercent, 0))} / -${plan.max_monthly_loss_percent}%`}
+              progress={monthlyPerformance.lossProgress}
+              tone="danger"
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-4">
+          <OutcomeTile label="Wins" value={monthlyPerformance.wins} className="border-[#22C55E]/20 bg-[#22C55E]/10" />
+          <OutcomeTile
+            label="Losses"
+            value={monthlyPerformance.losses}
+            className="border-destructive/20 bg-destructive/10"
+          />
+          <OutcomeTile
+            label="Breakevens"
+            value={monthlyPerformance.breakevens}
+            className="border-[#F59E0B]/20 bg-[#F59E0B]/10"
+          />
+          <OutcomeTile
+            label="Running"
+            value={monthlyPerformance.openTrades}
+            className="border-primary/20 bg-primary/10"
+          />
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr]">
+          <div className="rounded-2xl border bg-secondary/35 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="font-medium">Remaining path</div>
+                <div className="text-muted-foreground text-xs">What must happen without forcing trades.</div>
+              </div>
+              <Badge variant="outline">{monthlyPerformance.tradesRemaining} trades left</Badge>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <PlanTile label="Profit needed" value={formatSignedPercent(monthlyPerformance.profitGap)} />
+              <PlanTile label="Estimated wins needed" value={monthlyPerformance.winsNeeded} />
+              <PlanTile label="Losses remaining" value={monthlyPerformance.lossesRemaining} />
+              <PlanTile label="Current losing streak" value={monthlyPerformance.losingStreak} />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border bg-secondary/35 p-4">
+            <div className="font-medium">Risk efficiency</div>
+            <div className="mt-3 grid gap-2">
+              <CompactMetric
+                label="Win rate"
+                value={`${monthlyPerformance.winRate}% / ${monthlyPerformance.targetWinRate}%`}
+              />
+              <CompactMetric label="Avg win" value={formatSignedPercent(monthlyPerformance.avgWinPercent)} />
+              <CompactMetric label="Avg loss" value={formatSignedPercent(-monthlyPerformance.avgLossPercent)} />
+              <CompactMetric label="Expectancy" value={formatSignedPercent(monthlyPerformance.expectancy)} />
+              <CompactMetric label="Review completion" value={`${monthlyPerformance.reviewCompletion}%`} />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-3">
+          <PerformanceQualityCard
+            detail="Closed trades without saved rule pressure."
+            label="Rule-following P/L"
+            value={formatSignedMoney(monthlyPerformance.ruleFollowingProfit)}
+            tone="healthy"
+          />
+          <PerformanceQualityCard
+            detail="Closed trades with system alerts or failed rules."
+            label="Rule-pressure P/L"
+            value={formatSignedMoney(monthlyPerformance.rulePressureProfit)}
+            tone={monthlyPerformance.rulePressureProfit < 0 ? "danger" : "neutral"}
+          />
+          <PerformanceQualityCard
+            detail={
+              monthlyPerformance.bestPair
+                ? `${monthlyPerformance.bestPair.trades} trades, ${monthlyPerformance.bestPair.wins}W/${monthlyPerformance.bestPair.losses}L`
+                : "No closed trades this month."
+            }
+            label="Best pair"
+            value={monthlyPerformance.bestPair?.label ?? "Waiting"}
+            tone="neutral"
+          />
+        </div>
+
+        <div className="rounded-2xl border bg-background/30 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="font-medium">Pair performance</div>
+              <div className="text-muted-foreground text-xs">Where this month's outcome is coming from.</div>
+            </div>
+            {monthlyPerformance.worstPair ? (
+              <Badge variant="outline">Weakest: {monthlyPerformance.worstPair.label}</Badge>
+            ) : null}
+          </div>
+          {monthlyPerformance.pairPerformance.length ? (
+            <div className="grid gap-2">
+              {monthlyPerformance.pairPerformance.slice(0, 4).map((pair) => (
+                <PairPerformanceRow key={pair.label} pair={pair} />
+              ))}
+            </div>
+          ) : (
+            <MiniEmptyState
+              title="No monthly closed trades"
+              description="Closed trades will build the monthly plan view."
+            />
+          )}
         </div>
       </CardContent>
     </Card>
@@ -1044,6 +1367,97 @@ function OutcomeTile({ className, label, value }: { className: string; label: st
   );
 }
 
+function PlanProgress({
+  label,
+  progress,
+  tone = "primary",
+  value,
+}: {
+  label: string;
+  progress: number;
+  tone?: "danger" | "primary";
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl border bg-background/35 p-3">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-medium">{value}</span>
+      </div>
+      <Progress value={progress} className={tone === "danger" ? "mt-3 [&>div]:bg-destructive" : "mt-3"} />
+    </div>
+  );
+}
+
+function PlanTile({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-2xl border bg-background/35 p-3">
+      <div className="text-muted-foreground text-xs">{label}</div>
+      <div className="mt-1 font-semibold text-xl">{value}</div>
+    </div>
+  );
+}
+
+function CompactMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border bg-background/35 px-3 py-2 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium">{value}</span>
+    </div>
+  );
+}
+
+function PerformanceQualityCard({
+  detail,
+  label,
+  tone,
+  value,
+}: {
+  detail: string;
+  label: string;
+  tone: "danger" | "healthy" | "neutral";
+  value: string;
+}) {
+  const toneClass =
+    tone === "healthy"
+      ? "border-[#22C55E]/20 bg-[#22C55E]/10"
+      : tone === "danger"
+        ? "border-destructive/20 bg-destructive/10"
+        : "border-border bg-secondary/35";
+
+  return (
+    <div className={`rounded-2xl border p-4 ${toneClass}`}>
+      <div className="text-muted-foreground text-xs">{label}</div>
+      <div className="mt-1 truncate font-semibold text-xl">{value}</div>
+      <p className="mt-2 text-muted-foreground text-xs">{detail}</p>
+    </div>
+  );
+}
+
+function PairPerformanceRow({
+  pair,
+}: {
+  pair: { label: string; losses: number; profit: number; trades: number; wins: number };
+}) {
+  const winRate = pair.trades ? Math.round((pair.wins / pair.trades) * 100) : 0;
+
+  return (
+    <div className="grid gap-3 rounded-2xl border bg-secondary/35 p-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center">
+      <div>
+        <div className="font-medium">{pair.label}</div>
+        <div className="text-muted-foreground text-xs">
+          {pair.trades} trades - {pair.wins}W/{pair.losses}L
+        </div>
+      </div>
+      <Badge variant="outline">{winRate}% WR</Badge>
+      <Badge className={pair.profit >= 0 ? "bg-[#22C55E]/10 text-[#22C55E]" : "bg-destructive/10 text-destructive"}>
+        {formatSignedMoney(pair.profit)}
+      </Badge>
+      <Progress value={clamp(Math.abs(pair.profit))} className="min-w-24" />
+    </div>
+  );
+}
+
 function RiskRow({ label, severe, value }: { label: string; severe: boolean; value: number | string }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl border bg-secondary/35 p-3">
@@ -1119,6 +1533,14 @@ function getToneClass(tone: "healthy" | "neutral" | "warning") {
   }
 
   return "rounded-full bg-primary/10 text-primary";
+}
+
+function getStatusClass(tone: "danger" | "healthy" | "neutral" | "warning") {
+  if (tone === "danger") {
+    return "rounded-full bg-destructive/10 text-destructive";
+  }
+
+  return getToneClass(tone);
 }
 
 function getHeroNarrative({
