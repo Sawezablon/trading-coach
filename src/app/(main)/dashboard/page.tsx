@@ -168,12 +168,31 @@ function getTradeProfitPercent(trade: TradeWithAnalysis) {
 }
 
 function tradeHasRulePressure(trade: TradeWithAnalysis) {
-  const systemItems = getSystemReviewItems(trade.system_analysis);
-  const hasSystemAlert = systemItems.some((item) => item.status === "failed" || item.status === "warning");
-  const hasFailedRules = (trade.failed_rules?.length ?? 0) > 0;
-  const hasAiViolations = (getPrimaryAnalysis(trade)?.rule_violations.length ?? 0) > 0;
+  return getTradeRulePressureLabels(trade).length > 0;
+}
 
-  return hasSystemAlert || hasFailedRules || hasAiViolations;
+function getTradeRulePressureLabels(trade: TradeWithAnalysis) {
+  const systemItems = getSystemReviewItems(trade.system_analysis);
+  const systemAlerts = systemItems
+    .filter((item) => item.status === "failed" || item.status === "warning")
+    .map((item) => item.label);
+  const failedRules = trade.failed_rules ?? [];
+  const aiViolations = getPrimaryAnalysis(trade)?.rule_violations ?? [];
+
+  return [...systemAlerts, ...failedRules, ...aiViolations].filter(Boolean);
+}
+
+function getRulePressureSummary(trades: TradeWithAnalysis[]) {
+  const rulePressureTrades = trades.filter(tradeHasRulePressure).length;
+  const failedRuleCounts = countBy(trades.flatMap(getTradeRulePressureLabels));
+  const adherence = trades.length ? Math.round(((trades.length - rulePressureTrades) / trades.length) * 100) : 100;
+
+  return {
+    adherence,
+    failedRuleCounts,
+    mostFailedRule: failedRuleCounts[0]?.label ?? "No recurring rule break",
+    rulePressureTrades,
+  };
 }
 
 function getLosingStreak(trades: TradeWithAnalysis[]) {
@@ -555,13 +574,14 @@ function getDashboardModel(trades: TradeWithAnalysis[], performancePlan: Perform
   const reviewCompletion = trades.length
     ? Math.round(((trades.length - metrics.needsReviewTrades) / trades.length) * 100)
     : 0;
-  const ruleAdherence = Math.max(0, 100 - metrics.ruleViolationRate);
+  const rulePressureSummary = getRulePressureSummary(trades);
+  const ruleAdherence = rulePressureSummary.adherence;
   const highRiskEmotionTrades = trades.filter((trade) => getEmotionRisk(trade.emotions) === "high-risk");
   const warningEmotionTrades = trades.filter((trade) => getEmotionRisk(trade.emotions) === "warning");
   const emotionCounts = countBy(trades.flatMap((trade) => parseEmotionValues(trade.emotions)));
   const sessionCounts = countBy(trades.map((trade) => trade.session).filter(Boolean));
-  const failedRuleCounts = countBy(trades.flatMap((trade) => trade.failed_rules ?? []));
-  const mostFailedRule = failedRuleCounts[0]?.label ?? "No recurring rule break";
+  const failedRuleCounts = rulePressureSummary.failedRuleCounts;
+  const mostFailedRule = rulePressureSummary.mostFailedRule;
   const dominantEmotion = emotionCounts[0]?.label ?? "No emotion data";
   const behaviorState =
     metrics.needsReviewTrades > 0
