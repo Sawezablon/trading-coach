@@ -665,11 +665,11 @@ export default async function Page() {
 
           <section className="grid gap-4 xl:grid-cols-12">
             <RiskMonitoring model={model} />
-            <TradingTimeline trades={trades.slice(0, 6)} />
+            <TradingTimeline connection={selectedConnection} model={model} trades={trades} />
             <BehaviorPatterns model={model} />
           </section>
 
-          <RecentTrades trades={trades.slice(0, 5)} />
+          <RecentTrades trades={trades} />
         </>
       )}
     </div>
@@ -1200,29 +1200,141 @@ function RiskMonitoring({ model }: { model: ReturnType<typeof getDashboardModel>
   );
 }
 
-function TradingTimeline({ trades }: { trades: TradeWithAnalysis[] }) {
+type TimelineEvent = {
+  badge: string;
+  detail: string;
+  href: string;
+  timeLabel: string;
+  title: string;
+  tone: "danger" | "healthy" | "neutral" | "warning";
+};
+
+function buildAccountTimelineEvents({
+  connection,
+  model,
+  trades,
+}: {
+  connection: Mt5ConnectionStatus | null;
+  model: ReturnType<typeof getDashboardModel>;
+  trades: TradeWithAnalysis[];
+}): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+  const { metrics, monthlyPerformance } = model;
+
+  if (monthlyPerformance.status.tone === "danger") {
+    events.push({
+      badge: "Risk",
+      detail: monthlyPerformance.planRiskReasons[0] ?? "Plan limits are under pressure.",
+      href: "/dashboard/journal?filter=needs-review",
+      timeLabel: "Now",
+      title: "Risk mode triggered",
+      tone: "danger",
+    });
+  }
+
+  if (metrics.needsReviewTrades > 0) {
+    events.push({
+      badge: `${metrics.needsReviewTrades} pending`,
+      detail: "Imported trades need screenshots, emotions, and manual checklist review.",
+      href: "/dashboard/journal?filter=needs-review",
+      timeLabel: "Now",
+      title: "Review queue waiting",
+      tone: "warning",
+    });
+  }
+
+  if (metrics.systemAlerts > 0) {
+    events.push({
+      badge: `${metrics.systemAlerts} alerts`,
+      detail: `${metrics.systemAlertTrades} trade${metrics.systemAlertTrades === 1 ? "" : "s"} have automatic rule pressure.`,
+      href: "/dashboard/journal",
+      timeLabel: "Now",
+      title: "System alerts detected",
+      tone: "warning",
+    });
+  }
+
+  if (connection?.last_sync_at) {
+    events.push({
+      badge: "Synced",
+      detail: `${getMt5ConnectionLabel(connection)} sent the latest account data.`,
+      href: "/dashboard/settings/mt5",
+      timeLabel: formatShortDate(connection.last_sync_at),
+      title: "MT5 sync completed",
+      tone: "healthy",
+    });
+  }
+
+  for (const trade of trades.slice(0, 5)) {
+    const isClosed = trade.status === "closed";
+    const outcome = isClosed ? trade.outcome : "open";
+    events.push({
+      badge: isClosed ? outcome : "Open",
+      detail: isClosed
+        ? `${formatSignedMoney(Number(trade.profit_loss_amount ?? 0))} P/L${tradeHasRulePressure(trade) ? " with rule pressure" : ""}.`
+        : "Open trade still needs close details after exit.",
+      href: `/dashboard/trades/${trade.id}`,
+      timeLabel: formatTradeDateTime(trade.closed_at ?? trade.trade_taken_at, trade.trade_timezone),
+      title: `${trade.pair} ${isClosed ? `closed ${outcome}` : "opened"}`,
+      tone: trade.outcome === "loss" ? "danger" : trade.outcome === "win" ? "healthy" : "neutral",
+    });
+  }
+
+  return events.slice(0, 6);
+}
+
+function getTimelineToneClass(tone: TimelineEvent["tone"]) {
+  if (tone === "danger") {
+    return "bg-destructive shadow-[0_0_18px_rgb(239_68_68/0.35)]";
+  }
+
+  if (tone === "healthy") {
+    return "bg-[#22C55E] shadow-[0_0_18px_rgb(34_197_94/0.35)]";
+  }
+
+  if (tone === "warning") {
+    return "bg-[#F59E0B] shadow-[0_0_18px_rgb(245_158_11/0.35)]";
+  }
+
+  return "bg-primary shadow-[0_0_18px_rgb(124_92_255/0.45)]";
+}
+
+function TradingTimeline({
+  connection,
+  model,
+  trades,
+}: {
+  connection: Mt5ConnectionStatus | null;
+  model: ReturnType<typeof getDashboardModel>;
+  trades: TradeWithAnalysis[];
+}) {
+  const events = buildAccountTimelineEvents({ connection, model, trades });
+
   return (
     <Card className="xl:col-span-4">
       <CardHeader>
-        <SectionEyebrow icon={<IconMark text="TL" />}>Trading Timeline</SectionEyebrow>
-        <CardTitle>Latest account actions</CardTitle>
-        <CardDescription>A calm feed of your most recent execution behavior.</CardDescription>
+        <SectionEyebrow icon={<IconMark text="AT" />}>Account Timeline</SectionEyebrow>
+        <CardTitle>What changed recently</CardTitle>
+        <CardDescription>Syncs, risk events, reviews, and trade closes.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {trades.map((trade) => (
-          <Link key={trade.id} href={`/dashboard/trades/${trade.id}`} className="group grid grid-cols-[auto_1fr] gap-3">
+        {events.map((event) => (
+          <Link
+            key={`${event.title}-${event.timeLabel}`}
+            href={event.href}
+            className="group grid grid-cols-[auto_1fr] gap-3"
+          >
             <div className="mt-1 flex flex-col items-center">
-              <div className="size-2.5 rounded-full bg-primary shadow-[0_0_18px_rgb(124_92_255/0.45)]" />
+              <div className={`size-2.5 rounded-full ${getTimelineToneClass(event.tone)}`} />
               <div className="mt-2 h-full min-h-10 w-px bg-border group-last:hidden" />
             </div>
             <div className="rounded-2xl border bg-secondary/35 p-3 transition-colors group-hover:border-primary/35 group-hover:bg-card">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="font-medium">{trade.pair}</div>
-                <Badge variant="outline">{getTradeDiscipline(trade)}%</Badge>
+                <div className="font-medium">{event.title}</div>
+                <Badge variant="outline">{event.badge}</Badge>
               </div>
-              <div className="mt-1 text-muted-foreground text-xs">
-                {formatTradeDateTime(trade.trade_taken_at, trade.trade_timezone)} - {trade.session}
-              </div>
+              <div className="mt-1 text-muted-foreground text-xs">{event.detail}</div>
+              <div className="mt-2 text-muted-foreground text-[11px]">{event.timeLabel}</div>
             </div>
           </Link>
         ))}
@@ -1259,20 +1371,33 @@ function BehaviorPatterns({ model }: { model: ReturnType<typeof getDashboardMode
 }
 
 function RecentTrades({ trades }: { trades: TradeWithAnalysis[] }) {
+  const actionableTrades = [...trades]
+    .sort((left, right) => {
+      const leftPriority = left.review_status === "needs_review" ? 0 : left.status === "open" ? 1 : 2;
+      const rightPriority = right.review_status === "needs_review" ? 0 : right.status === "open" ? 1 : 2;
+
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+
+      return new Date(right.trade_taken_at).getTime() - new Date(left.trade_taken_at).getTime();
+    })
+    .slice(0, 5);
+
   return (
     <Card>
       <CardHeader className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <SectionEyebrow icon={<IconMark text="RT" />}>Recent Trades</SectionEyebrow>
-          <CardTitle>Review queue and latest decisions</CardTitle>
-          <CardDescription>Compact trade cards built for fast scanning.</CardDescription>
+          <CardTitle>Trades needing attention</CardTitle>
+          <CardDescription>Review queue first, open trades second, latest closed trades after.</CardDescription>
         </div>
         <Button asChild variant="outline" size="sm">
           <Link href="/dashboard/journal">View journal</Link>
         </Button>
       </CardHeader>
       <CardContent className="grid gap-3">
-        {trades.map((trade) => {
+        {actionableTrades.map((trade) => {
           const score = getTradeDiscipline(trade);
           return (
             <Link
