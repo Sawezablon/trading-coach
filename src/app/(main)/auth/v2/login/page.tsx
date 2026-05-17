@@ -19,6 +19,15 @@ export default function LoginV2() {
             <span className="relative z-10 bg-background px-2 text-muted-foreground">Or continue with</span>
           </div>
           <LoginForm />
+          <div className="text-center text-sm">
+            <Link
+              prefetch={false}
+              className="text-muted-foreground transition hover:text-foreground"
+              href="/auth/v2/forgot-password"
+            >
+              Forgot password?
+            </Link>
+          </div>
         </div>
       </div>
 

@@ -41,6 +41,11 @@ export function RegisterForm() {
           <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       ) : null}
+      {state.message ? (
+        <Alert>
+          <AlertDescription>{state.message}</AlertDescription>
+        </Alert>
+      ) : null}
       <FieldGroup className="gap-4">
         <Controller
           control={form.control}

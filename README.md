@@ -117,13 +117,17 @@ If you prefer the dashboard SQL editor, paste and run [supabase/schema.sql](./su
 In Supabase Dashboard:
 
 1. Go to **Authentication > URL Configuration**.
-2. Set **Site URL** to `http://localhost:3000` for local development.
-3. Add redirect URLs:
+2. For local development, set **Site URL** to `http://localhost:3000`.
+3. For production, set **Site URL** to `https://qyvexedge.com`.
+4. Add redirect URLs:
 
 ```text
 http://localhost:3000/**
-https://YOUR_VERCEL_DOMAIN/**
+https://qyvexedge.com/**
+https://www.qyvexedge.com/**
 ```
+
+Qyvex Edge passes an explicit redirect URL for signup confirmation, Google OAuth, and password reset emails using `NEXT_PUBLIC_APP_URL`. If Supabase emails are opening `localhost`, check both **Site URL** in Supabase and `NEXT_PUBLIC_APP_URL` in Vercel.
 
 Email/password auth is enough for this MVP. Google login can be enabled in Supabase Auth providers when needed.
 
@@ -198,6 +202,8 @@ Before calling a deployment production-ready:
 4. In Supabase Auth, set production redirect URLs:
 
 ```text
+Site URL: https://qyvexedge.com
+
 https://qyvexedge.com/**
 https://www.qyvexedge.com/**
 ```
