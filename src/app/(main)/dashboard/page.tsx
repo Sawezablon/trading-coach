@@ -265,15 +265,36 @@ function getMonthlyPerformanceModel(trades: TradeWithAnalysis[], plan: Performan
       .reduce((sum, trade) => sum + Number(trade.profit_loss_amount ?? 0), 0)
       .toFixed(2),
   );
+  const rulePressureTrades = closedTrades.filter(tradeHasRulePressure);
+  const ruleFollowingTrades = closedTrades.filter((trade) => !tradeHasRulePressure(trade));
   const losingStreak = getLosingStreak(monthTrades);
   const pairPerformance = buildPairPerformance(closedTrades);
   const bestPair = pairPerformance[0];
   const worstPair = [...pairPerformance].sort((left, right) => left.profit - right.profit)[0];
+  const reviewedTrades = monthTrades.filter((trade) => trade.review_status === "reviewed").length;
+  const reviewRequiredCount = Math.max(0, monthTrades.length - reviewedTrades);
+  const safeRemainingRiskPercent = Number(
+    Math.max(0, plan.max_monthly_loss_percent - Math.abs(Math.min(profitPercent, 0))).toFixed(2),
+  );
   const isPlanBroken =
     (plan.max_monthly_loss_percent > 0 && profitPercent <= -plan.max_monthly_loss_percent) ||
     (plan.max_trades_per_month > 0 && monthTrades.length > plan.max_trades_per_month) ||
-    (plan.max_losses_per_month > 0 && losses > plan.max_losses_per_month) ||
+    (plan.max_losses_per_month > 0 && losses >= plan.max_losses_per_month) ||
     (plan.max_losing_streak > 0 && losingStreak >= plan.max_losing_streak);
+  const planRiskReasons = [
+    ...(plan.max_losing_streak > 0 && losingStreak >= plan.max_losing_streak
+      ? [`${losingStreak}-loss streak hit the max losing streak`]
+      : []),
+    ...(plan.max_monthly_loss_percent > 0 && profitPercent <= -plan.max_monthly_loss_percent
+      ? [`monthly return reached the max loss limit (${formatSignedPercent(profitPercent)})`]
+      : []),
+    ...(plan.max_losses_per_month > 0 && losses >= plan.max_losses_per_month
+      ? [`${losses} losses reached the monthly loss limit`]
+      : []),
+    ...(plan.max_trades_per_month > 0 && monthTrades.length > plan.max_trades_per_month
+      ? [`${monthTrades.length} trades exceeded the monthly trade cap`]
+      : []),
+  ];
   const isBehind = profitProgress + 15 < tradeProgress || winRate + 5 < plan.target_win_rate_percent;
   const status = !monthTrades.length
     ? { label: "Ready", tone: "neutral" as const }
@@ -287,10 +308,32 @@ function getMonthlyPerformanceModel(trades: TradeWithAnalysis[], plan: Performan
   const insight = !monthTrades.length
     ? "Set the plan, take only qualified trades, then Qyvex will track the month automatically."
     : isPlanBroken
-      ? "Protect the account first. Your plan limits are under pressure."
+      ? `Stop chasing the target. ${planRiskReasons[0] ?? "Your plan limits are under pressure"}.`
       : profitGap > 0
         ? `You need ${formatSignedPercent(profitGap)} from ${tradesRemaining} remaining planned trade${tradesRemaining === 1 ? "" : "s"}.`
         : "Monthly target is reached. The priority is capital protection and clean execution.";
+  const dataConfidence =
+    reviewCompletion >= plan.min_review_completion_percent ? "High" : reviewCompletion > 0 ? "Medium" : "Low";
+  const riskEfficiencyInsight =
+    expectancy < 0 && avgWinPercent > avgLossPercent
+      ? "Average win is bigger than average loss, but win rate is below plan."
+      : expectancy < 0
+        ? "Expectancy is negative. Reduce risk until execution quality improves."
+        : "Risk efficiency is positive. Protect the process that created it.";
+  const performanceCause =
+    rulePressureTrades.length && rulePressureProfit < 0
+      ? `Rule-pressure trades are dragging the month: ${rulePressureTrades.length} trade${rulePressureTrades.length === 1 ? "" : "s"}, ${formatSignedMoney(rulePressureProfit)}.`
+      : ruleFollowingProfit > 0
+        ? `Clean trades are carrying performance: ${ruleFollowingTrades.length} trade${ruleFollowingTrades.length === 1 ? "" : "s"}, ${formatSignedMoney(ruleFollowingProfit)}.`
+        : "Closed trades need more review context before Qyvex can explain the performance quality.";
+  const pairDiagnosis =
+    pairPerformance.length === 1
+      ? `${pairPerformance[0].label} is the only active pair this month (${formatSignedMoney(pairPerformance[0].profit)}).`
+      : worstPair && worstPair.profit < 0
+        ? `${worstPair.label} is the weakest pair this month (${formatSignedMoney(worstPair.profit)}).`
+        : bestPair
+          ? `${bestPair.label} is leading the month (${formatSignedMoney(bestPair.profit)}).`
+          : "No pair pattern yet.";
 
   return {
     avgLossPercent,
@@ -298,6 +341,7 @@ function getMonthlyPerformanceModel(trades: TradeWithAnalysis[], plan: Performan
     bestPair,
     breakevens,
     closedTrades: closedTrades.length,
+    dataConfidence,
     expectancy,
     insight,
     lossProgress,
@@ -307,14 +351,23 @@ function getMonthlyPerformanceModel(trades: TradeWithAnalysis[], plan: Performan
     monthLabel: getMonthLabel(),
     openTrades,
     pairPerformance,
+    pairDiagnosis,
     plan,
+    planRiskReasons,
+    performanceCause,
     profitAmount,
     profitGap,
     profitPercent,
     profitProgress,
     reviewCompletion,
+    reviewedTrades,
+    reviewRequiredCount,
     ruleFollowingProfit,
+    ruleFollowingTrades: ruleFollowingTrades.length,
     rulePressureProfit,
+    rulePressureTrades: rulePressureTrades.length,
+    riskEfficiencyInsight,
+    safeRemainingRiskPercent,
     status,
     targetWinRate: plan.target_win_rate_percent,
     tradeProgress,
@@ -806,6 +859,7 @@ function DisciplineIntelligence({ model }: { model: ReturnType<typeof getDashboa
 function PerformanceAnalytics({ model }: { model: ReturnType<typeof getDashboardModel> }) {
   const { monthlyPerformance } = model;
   const plan = monthlyPerformance.plan;
+  const isDamageControl = monthlyPerformance.status.tone === "danger";
 
   return (
     <Card className="xl:col-span-7">
@@ -881,62 +935,68 @@ function PerformanceAnalytics({ model }: { model: ReturnType<typeof getDashboard
           />
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr]">
-          <div className="rounded-2xl border bg-secondary/35 p-4">
-            <div className="flex items-center justify-between gap-3">
+        {isDamageControl ? (
+          <>
+            <DamageControlPanel monthlyPerformance={monthlyPerformance} />
+            <WhyItHappenedPanel monthlyPerformance={monthlyPerformance} />
+            <div className="flex flex-col gap-3 rounded-2xl border border-destructive/20 bg-destructive/10 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <div className="font-medium">Remaining path</div>
-                <div className="text-muted-foreground text-xs">What must happen without forcing trades.</div>
+                <div className="font-semibold">
+                  You are losing because rule-pressure trades are dragging the account.
+                </div>
+                <p className="mt-1 text-muted-foreground text-sm">
+                  Stop chasing the target. Review first, then only take A+ setups at reduced risk.
+                </p>
               </div>
-              <Badge variant="outline">{monthlyPerformance.tradesRemaining} trades left</Badge>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/dashboard/journal?filter=needs-review">Review losing streak</Link>
+              </Button>
             </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <PlanTile label="Profit needed" value={formatSignedPercent(monthlyPerformance.profitGap)} />
-              <PlanTile label="Estimated wins needed" value={monthlyPerformance.winsNeeded} />
-              <PlanTile label="Losses remaining" value={monthlyPerformance.lossesRemaining} />
-              <PlanTile label="Current losing streak" value={monthlyPerformance.losingStreak} />
-            </div>
-          </div>
+          </>
+        ) : (
+          <>
+            <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr]">
+              <div className="rounded-2xl border bg-secondary/35 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-medium">Remaining path</div>
+                    <div className="text-muted-foreground text-xs">What must happen without forcing trades.</div>
+                  </div>
+                  <Badge variant="outline">{monthlyPerformance.tradesRemaining} trades left</Badge>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <PlanTile label="Profit needed" value={formatSignedPercent(monthlyPerformance.profitGap)} />
+                  <PlanTile label="Estimated wins needed" value={monthlyPerformance.winsNeeded} />
+                  <PlanTile label="Losses remaining" value={monthlyPerformance.lossesRemaining} />
+                  <PlanTile label="Current losing streak" value={monthlyPerformance.losingStreak} />
+                </div>
+              </div>
 
-          <div className="rounded-2xl border bg-secondary/35 p-4">
-            <div className="font-medium">Risk efficiency</div>
-            <div className="mt-3 grid gap-2">
-              <CompactMetric
-                label="Win rate"
-                value={`${monthlyPerformance.winRate}% / ${monthlyPerformance.targetWinRate}%`}
+              <RiskEfficiencyPanel monthlyPerformance={monthlyPerformance} />
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-3">
+              <PerformanceQualityCard
+                detail={`${monthlyPerformance.ruleFollowingTrades} clean trade${monthlyPerformance.ruleFollowingTrades === 1 ? "" : "s"} without saved rule pressure.`}
+                label="Rule-following P/L"
+                value={formatSignedMoney(monthlyPerformance.ruleFollowingProfit)}
+                tone="healthy"
               />
-              <CompactMetric label="Avg win" value={formatSignedPercent(monthlyPerformance.avgWinPercent)} />
-              <CompactMetric label="Avg loss" value={formatSignedPercent(-monthlyPerformance.avgLossPercent)} />
-              <CompactMetric label="Expectancy" value={formatSignedPercent(monthlyPerformance.expectancy)} />
-              <CompactMetric label="Review completion" value={`${monthlyPerformance.reviewCompletion}%`} />
+              <PerformanceQualityCard
+                detail={`${monthlyPerformance.rulePressureTrades} trade${monthlyPerformance.rulePressureTrades === 1 ? "" : "s"} with system alerts or failed rules.`}
+                label="Rule-pressure P/L"
+                value={formatSignedMoney(monthlyPerformance.rulePressureProfit)}
+                tone={monthlyPerformance.rulePressureProfit < 0 ? "danger" : "neutral"}
+              />
+              <PerformanceQualityCard
+                detail={monthlyPerformance.pairDiagnosis}
+                label={monthlyPerformance.pairPerformance.length === 1 ? "Only active pair" : "Best pair"}
+                value={monthlyPerformance.bestPair?.label ?? "Waiting"}
+                tone="neutral"
+              />
             </div>
-          </div>
-        </div>
-
-        <div className="grid gap-3 lg:grid-cols-3">
-          <PerformanceQualityCard
-            detail="Closed trades without saved rule pressure."
-            label="Rule-following P/L"
-            value={formatSignedMoney(monthlyPerformance.ruleFollowingProfit)}
-            tone="healthy"
-          />
-          <PerformanceQualityCard
-            detail="Closed trades with system alerts or failed rules."
-            label="Rule-pressure P/L"
-            value={formatSignedMoney(monthlyPerformance.rulePressureProfit)}
-            tone={monthlyPerformance.rulePressureProfit < 0 ? "danger" : "neutral"}
-          />
-          <PerformanceQualityCard
-            detail={
-              monthlyPerformance.bestPair
-                ? `${monthlyPerformance.bestPair.trades} trades, ${monthlyPerformance.bestPair.wins}W/${monthlyPerformance.bestPair.losses}L`
-                : "No closed trades this month."
-            }
-            label="Best pair"
-            value={monthlyPerformance.bestPair?.label ?? "Waiting"}
-            tone="neutral"
-          />
-        </div>
+          </>
+        )}
 
         <div className="rounded-2xl border bg-background/30 p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
@@ -1363,6 +1423,98 @@ function OutcomeTile({ className, label, value }: { className: string; label: st
     <div className={`rounded-2xl border p-3 ${className}`}>
       <div className="text-muted-foreground text-xs">{label}</div>
       <div className="mt-1 font-semibold text-2xl">{value}</div>
+    </div>
+  );
+}
+
+function DamageControlPanel({
+  monthlyPerformance,
+}: {
+  monthlyPerformance: ReturnType<typeof getMonthlyPerformanceModel>;
+}) {
+  const primaryReason = monthlyPerformance.planRiskReasons[0] ?? "Plan limits are under pressure";
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-[1fr_0.9fr]">
+      <div className="rounded-2xl border border-destructive/20 bg-destructive/10 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="font-medium">Damage control</div>
+            <div className="text-muted-foreground text-xs">Do not calculate the target. Stabilize execution first.</div>
+          </div>
+          <Badge className="bg-destructive/10 text-destructive">Risk mode</Badge>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <PlanTile label="Reason" value={primaryReason} />
+          <PlanTile
+            label="Review required"
+            value={`${monthlyPerformance.reviewRequiredCount}/${monthlyPerformance.totalTrades}`}
+          />
+          <PlanTile label="Next trade mode" value="Reduced risk / A+ only" />
+          <PlanTile
+            label="Safe remaining risk"
+            value={formatSignedPercent(monthlyPerformance.safeRemainingRiskPercent)}
+          />
+        </div>
+      </div>
+
+      <RiskEfficiencyPanel monthlyPerformance={monthlyPerformance} />
+    </div>
+  );
+}
+
+function WhyItHappenedPanel({
+  monthlyPerformance,
+}: {
+  monthlyPerformance: ReturnType<typeof getMonthlyPerformanceModel>;
+}) {
+  return (
+    <div className="rounded-2xl border bg-secondary/35 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="font-medium">Why it happened</div>
+          <p className="mt-1 text-muted-foreground text-sm">{monthlyPerformance.performanceCause}</p>
+        </div>
+        <Badge variant="outline">Confidence: {monthlyPerformance.dataConfidence}</Badge>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-4">
+        <PlanTile
+          label="Rule-pressure trades"
+          value={`${monthlyPerformance.rulePressureTrades} / ${formatSignedMoney(monthlyPerformance.rulePressureProfit)}`}
+        />
+        <PlanTile
+          label="Clean trades"
+          value={`${monthlyPerformance.ruleFollowingTrades} / ${formatSignedMoney(monthlyPerformance.ruleFollowingProfit)}`}
+        />
+        <PlanTile label="Pair read" value={monthlyPerformance.pairDiagnosis} />
+        <PlanTile label="Expectancy" value={formatSignedPercent(monthlyPerformance.expectancy)} />
+      </div>
+    </div>
+  );
+}
+
+function RiskEfficiencyPanel({
+  monthlyPerformance,
+}: {
+  monthlyPerformance: ReturnType<typeof getMonthlyPerformanceModel>;
+}) {
+  return (
+    <div className="rounded-2xl border bg-secondary/35 p-4">
+      <div className="font-medium">Risk efficiency</div>
+      <p className="mt-1 text-muted-foreground text-xs">{monthlyPerformance.riskEfficiencyInsight}</p>
+      <div className="mt-3 grid gap-2">
+        <CompactMetric
+          label="Win rate"
+          value={`${monthlyPerformance.winRate}% / ${monthlyPerformance.targetWinRate}%`}
+        />
+        <CompactMetric label="Avg win" value={formatSignedPercent(monthlyPerformance.avgWinPercent)} />
+        <CompactMetric label="Avg loss" value={formatSignedPercent(-monthlyPerformance.avgLossPercent)} />
+        <CompactMetric label="Expectancy" value={formatSignedPercent(monthlyPerformance.expectancy)} />
+        <CompactMetric
+          label="Review completion"
+          value={`${monthlyPerformance.reviewCompletion}% (${monthlyPerformance.reviewedTrades}/${monthlyPerformance.totalTrades})`}
+        />
+      </div>
     </div>
   );
 }
