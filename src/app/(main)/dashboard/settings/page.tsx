@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getRules } from "@/lib/data/trades";
+import { demoRules } from "@/lib/mock-data";
+import type { RuleSettings } from "@/lib/supabase/types";
 
 import { FeedbackActions } from "../_components/feedback/feedback-actions";
 import { SupportQyvexCard } from "../_components/support/support-qyvex-card";
@@ -18,7 +20,8 @@ export default async function SettingsPage({
 }: {
   searchParams: Promise<{ saved?: string; error?: string }>;
 }) {
-  const rules = await getRules();
+  const rulesResult = await getSettingsRules();
+  const rules = normalizeRules(rulesResult.rules);
   const params = await searchParams;
 
   return (
@@ -54,6 +57,15 @@ export default async function SettingsPage({
       {params.error ? (
         <Alert variant="destructive">
           <AlertDescription>{params.error}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {rulesResult.error ? (
+        <Alert variant="destructive">
+          <AlertDescription>
+            Settings loaded with safe defaults because Supabase returned: {rulesResult.error}. Apply the latest
+            migrations if this persists.
+          </AlertDescription>
         </Alert>
       ) : null}
 
@@ -235,8 +247,35 @@ export default async function SettingsPage({
   );
 }
 
-function optionalRuleValue(value: number) {
-  return value > 0 ? value : "";
+async function getSettingsRules() {
+  try {
+    return { rules: await getRules(), error: "" };
+  } catch (error) {
+    return {
+      rules: demoRules,
+      error: error instanceof Error ? error.message : "Unable to load trading rules",
+    };
+  }
+}
+
+function normalizeRules(rules: RuleSettings): RuleSettings {
+  return {
+    ...demoRules,
+    ...rules,
+    allowed_sessions: Array.isArray(rules.allowed_sessions) ? rules.allowed_sessions : [],
+    allowed_pairs: Array.isArray(rules.allowed_pairs) ? rules.allowed_pairs : [],
+    allowed_directions: Array.isArray(rules.allowed_directions) ? rules.allowed_directions : [],
+    custom_rules: Array.isArray(rules.custom_rules) ? rules.custom_rules : [],
+    confirmation_required: Boolean(rules.confirmation_required),
+    require_screenshot: Boolean(rules.require_screenshot),
+    require_stop_loss: Boolean(rules.require_stop_loss),
+    require_take_profit: Boolean(rules.require_take_profit),
+    strict_mode: Boolean(rules.strict_mode),
+  };
+}
+
+function optionalRuleValue(value: number | null | undefined) {
+  return typeof value === "number" && value > 0 ? value : "";
 }
 
 function SystemToggle({ defaultChecked, id, label }: { defaultChecked: boolean; id: string; label: string }) {
