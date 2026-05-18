@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, Database, FilePlus2, type LucideIcon, Settings } from "lucide-react";
+import { BarChart3, BookOpen, Database, FilePlus2, type LucideIcon, MessageSquareDot, Settings } from "lucide-react";
 
 export interface NavSubItem {
   title: string;
@@ -63,6 +63,11 @@ export const sidebarItems: NavGroup[] = [
             title: "MT5 Sync",
             url: "/dashboard/settings/mt5",
             icon: Database,
+          },
+          {
+            title: "Feedback",
+            url: "/dashboard/settings/feedback",
+            icon: MessageSquareDot,
           },
         ],
       },

@@ -39,6 +39,9 @@ export default async function SettingsPage({
           <Button asChild variant="outline">
             <Link href="/dashboard/settings/mt5">MT5 Sync settings</Link>
           </Button>
+          <Button asChild variant="outline">
+            <Link href="/dashboard/settings/feedback">Feedback inbox</Link>
+          </Button>
         </div>
       </div>
 

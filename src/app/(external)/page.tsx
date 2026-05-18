@@ -193,9 +193,19 @@ export default function Home() {
       </section>
 
       <footer className="border-t px-6 py-6 text-muted-foreground text-sm lg:px-14">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <span>Qyvex Edge by Qyvex</span>
-          <span>No signals. No predictions. Discipline first.</span>
+          <div className="flex flex-wrap gap-4">
+            <Link href="/privacy" className="transition hover:text-foreground">
+              Privacy
+            </Link>
+            <Link href="/terms" className="transition hover:text-foreground">
+              Terms
+            </Link>
+            <Link href="/disclaimer" className="transition hover:text-foreground">
+              Disclaimer
+            </Link>
+          </div>
         </div>
       </footer>
     </main>

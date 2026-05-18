@@ -180,6 +180,9 @@ NEXT_PUBLIC_APP_URL=https://qyvexedge.com
 NEXT_PUBLIC_MT5_SYNC_URL=https://sync.qyvexedge.com/api/mt5/sync
 ```
 
+Feedback submitted in-app is stored in `feedback_reports`. Users can see reports submitted from their own account in
+**Settings > Feedback**. For V1.0, owner-wide triage can be reviewed directly in Supabase.
+
 ## AI Setup
 
 Add `OPENAI_API_KEY` to enable OpenAI analysis. Without it, Qyvex Edge returns deterministic mock coaching feedback so the product flow remains usable during local development.
@@ -238,6 +241,8 @@ https://sync.qyvexedge.com
 - Set Trading Rules
 - Set Performance Plan
 - Confirm Dashboard loads without server errors
+- Open Settings > Feedback inbox and confirm reports can be read
+- Confirm `/privacy`, `/terms`, and `/disclaimer` load
 - Delete a test trade
 
 ## MT5 Sync Developer Test

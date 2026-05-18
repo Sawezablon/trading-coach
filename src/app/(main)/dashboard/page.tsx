@@ -1431,29 +1431,68 @@ function RecentTrades({ trades }: { trades: TradeWithAnalysis[] }) {
 }
 
 function EmptyDashboardState({ hasConnections }: { hasConnections: boolean }) {
+  const steps = [
+    {
+      body: "Define risk, RR, session, pair, and checklist guardrails.",
+      href: "/dashboard/settings",
+      label: "Set rules",
+      title: "1. Set your trading rules",
+    },
+    {
+      body: hasConnections
+        ? "Your account is connected. Keep MT5 open when you want fresh syncs."
+        : "Import read-only MT5 history or keep logging manually.",
+      href: "/dashboard/settings/mt5",
+      label: hasConnections ? "View MT5" : "Connect MT5",
+      title: "2. Connect or choose manual",
+    },
+    {
+      body: "Add your first trade context so Qyvex can calculate discipline data.",
+      href: "/dashboard/upload",
+      label: "Log trade",
+      title: "3. Log or review a trade",
+    },
+  ];
+
   return (
     <Card className="overflow-hidden border-dashed bg-gradient-to-br from-card to-secondary/50">
-      <CardContent className="grid gap-6 p-6 lg:grid-cols-[1fr_auto] lg:items-center">
-        <div>
-          <div className="flex size-12 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
-            <span className="font-semibold text-xs">QX</span>
+      <CardContent className="space-y-6 p-6">
+        <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div>
+            <div className="flex size-12 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
+              <span className="font-semibold text-xs">QX</span>
+            </div>
+            <h2 className="mt-4 font-semibold text-2xl tracking-tight">
+              {hasConnections ? "This account is ready for review" : "Connect your first trading account"}
+            </h2>
+            <p className="mt-2 max-w-2xl text-muted-foreground text-sm">
+              {hasConnections
+                ? "Sync or log trades into this account to build discipline, psychology, and risk analytics."
+                : "Use MT5 sync or add a manual journal entry. Qyvex Edge becomes more useful with every reviewed trade."}
+            </p>
           </div>
-          <h2 className="mt-4 font-semibold text-2xl tracking-tight">
-            {hasConnections ? "This account is ready for review" : "Connect your first trading account"}
-          </h2>
-          <p className="mt-2 max-w-2xl text-muted-foreground text-sm">
-            {hasConnections
-              ? "Sync or log trades into this account to build discipline, psychology, and risk analytics."
-              : "Use MT5 sync or add a manual journal entry. Qyvex Edge becomes more useful with every reviewed trade."}
-          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href="/dashboard/upload">Log trade</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/settings/mt5">Set up MT5</Link>
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild>
-            <Link href="/dashboard/upload">Log trade</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/dashboard/settings/mt5">Set up MT5</Link>
-          </Button>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          {steps.map((step) => (
+            <Link
+              key={step.title}
+              href={step.href}
+              className="rounded-2xl border bg-background/35 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:bg-card"
+            >
+              <h3 className="font-semibold text-sm">{step.title}</h3>
+              <p className="mt-2 text-muted-foreground text-xs leading-5">{step.body}</p>
+              <div className="mt-4 text-primary text-xs">{step.label}</div>
+            </Link>
+          ))}
         </div>
       </CardContent>
     </Card>
