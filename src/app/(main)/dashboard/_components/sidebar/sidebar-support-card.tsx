@@ -5,13 +5,19 @@ import { siX } from "simple-icons";
 import { SimpleIcon } from "@/components/simple-icon";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
+import { FeedbackActions } from "../feedback/feedback-actions";
+
 export function SidebarSupportCard() {
   return (
     <Card size="sm" className="shadow-none group-data-[collapsible=icon]:hidden">
-      <CardHeader className="px-4">
-        <CardTitle className="text-sm">Looking for something more?</CardTitle>
+      <CardHeader className="gap-3 px-4">
+        <div className="space-y-1">
+          <CardTitle className="text-sm">Help improve Qyvex Edge</CardTitle>
+          <CardDescription>Report issues or suggest what should be better in the next version.</CardDescription>
+        </div>
+        <FeedbackActions compact />
         <CardDescription>
-          Open an issue or do reach out to me on&nbsp;
+          You can also reach us on&nbsp;
           <Link
             href="https://x.com/useqyvex"
             target="_blank"

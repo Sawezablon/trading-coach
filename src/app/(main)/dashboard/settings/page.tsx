@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getRules } from "@/lib/data/trades";
 
+import { FeedbackActions } from "../_components/feedback/feedback-actions";
+
 export default async function SettingsPage({
   searchParams,
 }: {
@@ -50,6 +52,18 @@ export default async function SettingsPage({
           <AlertDescription>{params.error}</AlertDescription>
         </Alert>
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Feedback & reports</CardTitle>
+          <CardDescription>
+            Qyvex Edge is in V1. Send bugs, confusing moments, or product ideas directly from the app.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FeedbackActions />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

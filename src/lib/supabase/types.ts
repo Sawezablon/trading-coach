@@ -163,6 +163,24 @@ export type PerformancePlan = {
   updated_at: string;
 };
 
+export type FeedbackReport = {
+  id: string;
+  user_id: string;
+  type: "bug" | "improvement";
+  category: string;
+  severity: "low" | "medium" | "high" | "blocking";
+  title: string | null;
+  message: string;
+  page_url: string | null;
+  user_agent: string | null;
+  browser_language: string | null;
+  viewport_width: number | null;
+  viewport_height: number | null;
+  status: "open" | "reviewing" | "resolved" | "closed";
+  created_at: string;
+  updated_at: string;
+};
+
 export type ChecklistItemResult = {
   id: string;
   label: string;
@@ -263,6 +281,13 @@ export type Database = {
         Row: PerformancePlan;
         Insert: Partial<PerformancePlan> & Pick<PerformancePlan, "user_id">;
         Update: Partial<PerformancePlan>;
+        Relationships: [];
+      };
+      feedback_reports: {
+        Row: FeedbackReport;
+        Insert: Partial<FeedbackReport> &
+          Pick<FeedbackReport, "user_id" | "type" | "category" | "severity" | "message">;
+        Update: Partial<FeedbackReport>;
         Relationships: [];
       };
     };

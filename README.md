@@ -14,11 +14,12 @@ Qyvex Edge is not a trading bot, signal provider, prediction platform, broker in
 - Chart screenshot upload flow with trade notes, pair, risk, RR, session, selected emotions, and confirmation status
 - Rules settings for system checks and user checklist rules
 - Performance Plan settings for monthly targets, drawdown limits, trade caps, and review standards
+- In-app feedback reports for bugs, confusing UX, and improvement ideas
 - Deterministic rule engine for checklist pass/fail and MT5 system-review checks
 - MT5 read-only sync foundation with multi-account support, duplicate protection, manual resync requests, and imported-trade review workflow
 - AI analysis pipeline using OpenAI when configured
 - Mock AI responses when `OPENAI_API_KEY` is missing
-- Supabase schema for `profiles`, `trades`, `trading_rules`, `performance_plans`, `ai_analysis`, `mt5_connections`, and `mt5_sync_requests`
+- Supabase schema for `profiles`, `trades`, `trading_rules`, `performance_plans`, `ai_analysis`, `mt5_connections`, `mt5_sync_requests`, and `feedback_reports`
 
 ## Tech Stack
 
@@ -98,6 +99,7 @@ This creates and updates:
 - `ai_analysis`
 - `mt5_connections`
 - `mt5_sync_requests`
+- `feedback_reports`
 - chart screenshot storage policies
 - trade lifecycle fields
 - trade timezone support
