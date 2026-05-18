@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getRules } from "@/lib/data/trades";
 
 import { FeedbackActions } from "../_components/feedback/feedback-actions";
+import { SupportQyvexCard } from "../_components/support/support-qyvex-card";
 
 export default async function SettingsPage({
   searchParams,
@@ -52,6 +53,8 @@ export default async function SettingsPage({
           <AlertDescription>{params.error}</AlertDescription>
         </Alert>
       ) : null}
+
+      <SupportQyvexCard />
 
       <Card>
         <CardHeader>

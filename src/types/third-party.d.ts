@@ -29,6 +29,7 @@ declare module "lucide-react" {
   export const CircleXIcon: LucideIcon;
   export const ClipboardList: LucideIcon;
   export const Command: LucideIcon;
+  export const Coffee: LucideIcon;
   export const CreditCard: LucideIcon;
   export const Database: LucideIcon;
   export const Ellipsis: LucideIcon;
