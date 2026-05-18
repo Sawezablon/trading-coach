@@ -27,7 +27,7 @@ function severityClass(severity: FeedbackReport["severity"]) {
 }
 
 export default async function FeedbackInboxPage() {
-  const { reports, isAdminView } = await getFeedbackInbox();
+  const { error, reports, isAdminView } = await getFeedbackInbox();
   const bugCount = reports.filter((report) => report.type === "bug").length;
   const ideaCount = reports.filter((report) => report.type === "improvement").length;
   const blockingCount = reports.filter((report) => report.severity === "blocking").length;
@@ -73,7 +73,20 @@ export default async function FeedbackInboxPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {reports.length ? (
+          {error ? (
+            <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-5">
+              <h2 className="font-semibold text-destructive">Feedback inbox is not ready yet</h2>
+              <p className="mt-2 text-muted-foreground text-sm leading-6">
+                Supabase returned: <span className="text-foreground">{error}</span>
+              </p>
+              <p className="mt-2 text-muted-foreground text-sm leading-6">
+                Apply the latest feedback migration:
+                <span className="ml-1 text-foreground">
+                  supabase/migrations/202605180001_create_feedback_reports.sql
+                </span>
+              </p>
+            </div>
+          ) : reports.length ? (
             reports.map((report) => <FeedbackReportRow key={report.id} report={report} />)
           ) : (
             <div className="rounded-2xl border border-dashed p-6 text-center">
