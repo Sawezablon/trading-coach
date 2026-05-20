@@ -4,7 +4,7 @@
 //| This EA does not place, modify, or close trades.                  |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "1.05"
+#property version   "1.06"
 #property description "Read-only Qyvex Edge trade sync EA."
 
 input string QyvexApiKey = "";
@@ -12,6 +12,7 @@ input string SyncUrl = "https://sync.qyvexedge.com/api/mt5/sync";
 input int SyncIntervalMinutes = 5;
 input int InitialHistoryLookbackDays = 365;
 input int SyncOverlapMinutes = 10;
+input int ClosedTradeDetailLookupDays = 30;
 
 datetime g_lastSyncTime = 0;
 string g_lastStatus = "Waiting for first sync";
@@ -394,9 +395,10 @@ int CollectClosedDeals(string &items)
 {
    int count = 0;
    datetime now = TimeCurrent();
-   datetime historyFrom = ClosedHistoryFrom();
+   datetime closedHistoryFrom = ClosedHistoryFrom();
+   datetime detailHistoryFrom = closedHistoryFrom - (MathMax(1, ClosedTradeDetailLookupDays) * 24 * 60 * 60);
 
-   if(!HistorySelect(historyFrom, now))
+   if(!HistorySelect(detailHistoryFrom, now))
       return 0;
 
    int total = HistoryDealsTotal();
@@ -419,6 +421,9 @@ int CollectClosedDeals(string &items)
          continue;
 
       datetime closeTime = (datetime)HistoryDealGetInteger(dealTicket, DEAL_TIME);
+
+      if(closeTime < closedHistoryFrom)
+         continue;
 
       ulong positionId = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
       datetime openTime = 0;

@@ -302,6 +302,7 @@ SyncUrl = https://sync.qyvexedge.com/api/mt5/sync
 SyncIntervalMinutes = 5
 InitialHistoryLookbackDays = 365
 SyncOverlapMinutes = 10
+ClosedTradeDetailLookupDays = 30
 ```
 
 Before the EA can send data, enable WebRequest in MetaTrader:
@@ -316,6 +317,6 @@ https://sync.qyvexedge.com
 
 Keep the public app on `https://qyvexedge.com`. The dedicated `sync.qyvexedge.com` endpoint is used for MT5 WebRequest traffic.
 
-The EA is read-only. On first run, it sends closed trade history from `InitialHistoryLookbackDays`. After a successful sync, it stores the last successful sync time locally in MT5, then future syncs send open positions plus closed deals since the last successful sync minus `SyncOverlapMinutes`. If MT5 is closed for days, the next launch catches up from the last successful sync. Qyvex Edge handles duplicate MT5 tickets by updating the existing journal row.
+The EA is read-only. On first run, it sends closed trade history from `InitialHistoryLookbackDays`. After a successful sync, it stores the last successful sync time locally in MT5, then future syncs send open positions plus closed deals since the last successful sync minus `SyncOverlapMinutes`. For closed trades, `ClosedTradeDetailLookupDays` lets the EA look farther back to recover the original entry price, stop loss, and take profit for trades that were opened before the latest sync window. If MT5 is closed for days, the next launch catches up from the last successful sync. Qyvex Edge handles duplicate MT5 tickets by updating the existing journal row.
 
 If synced MT5 trades are deleted from Qyvex, open **Settings > MT5 Sync** and click **Request 365-day resync**. The EA checks for pending resync requests on every sync, sends the requested history once, and Qyvex marks the request completed after receiving it.
