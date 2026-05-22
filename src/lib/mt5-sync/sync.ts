@@ -509,12 +509,14 @@ function mt5CloseFactsChanged(
 
 async function deactivateDuplicateConnections({
   accountNumber,
+  apiKeyHash,
   broker,
   connectionId,
   supabase,
   userId,
 }: {
   accountNumber: string;
+  apiKeyHash: string;
   broker: string | null;
   connectionId: string;
   supabase: AppSupabaseClient;
@@ -522,7 +524,7 @@ async function deactivateDuplicateConnections({
 }) {
   let duplicateQuery = supabase
     .from("mt5_connections")
-    .select("id")
+    .select("id, last_sync_at, account_number")
     .eq("user_id", userId)
     .eq("account_number", accountNumber)
     .eq("is_active", true)
@@ -533,13 +535,59 @@ async function deactivateDuplicateConnections({
   const { data: duplicateConnections, error: duplicateError } = await duplicateQuery;
 
   if (duplicateError) {
-    return { duplicateIds: [], error: duplicateError.message };
+    return { activeConnectionId: connectionId, duplicateIds: [], error: duplicateError.message };
   }
 
-  const duplicateIds = (duplicateConnections ?? []).map((connection) => connection.id);
+  const duplicates = duplicateConnections ?? [];
+  const duplicateIds = duplicates.map((connection) => connection.id);
 
   if (!duplicateIds.length) {
-    return { duplicateIds, error: null };
+    return { activeConnectionId: connectionId, duplicateIds, error: null };
+  }
+
+  const existingAccountConnection =
+    duplicates.find((connection) => connection.account_number && connection.last_sync_at) ?? duplicates[0];
+
+  if (existingAccountConnection) {
+    const inactiveDuplicateIds = [connectionId, ...duplicateIds.filter((id) => id !== existingAccountConnection.id)];
+
+    const { error: pendingDeactivateError } = await supabase
+      .from("mt5_connections")
+      .update({ is_active: false })
+      .in("id", inactiveDuplicateIds)
+      .eq("user_id", userId);
+
+    if (pendingDeactivateError) {
+      return { activeConnectionId: connectionId, duplicateIds, error: pendingDeactivateError.message };
+    }
+
+    const { error: requestUpdateError } = await supabase
+      .from("mt5_sync_requests")
+      .update({ mt5_connection_id: existingAccountConnection.id })
+      .in("mt5_connection_id", [connectionId, ...duplicateIds]);
+
+    if (requestUpdateError) {
+      return { activeConnectionId: connectionId, duplicateIds, error: requestUpdateError.message };
+    }
+
+    const { error: credentialUpdateError } = await supabase
+      .from("mt5_connections")
+      .update({
+        api_key_hash: apiKeyHash,
+        is_active: true,
+      })
+      .eq("id", existingAccountConnection.id)
+      .eq("user_id", userId);
+
+    if (credentialUpdateError) {
+      return { activeConnectionId: connectionId, duplicateIds, error: credentialUpdateError.message };
+    }
+
+    return {
+      activeConnectionId: existingAccountConnection.id,
+      duplicateIds: inactiveDuplicateIds,
+      error: null,
+    };
   }
 
   const { error: requestUpdateError } = await supabase
@@ -548,7 +596,7 @@ async function deactivateDuplicateConnections({
     .in("mt5_connection_id", duplicateIds);
 
   if (requestUpdateError) {
-    return { duplicateIds, error: requestUpdateError.message };
+    return { activeConnectionId: connectionId, duplicateIds, error: requestUpdateError.message };
   }
 
   const { error: deactivateError } = await supabase
@@ -557,7 +605,7 @@ async function deactivateDuplicateConnections({
     .in("id", duplicateIds)
     .eq("user_id", userId);
 
-  return { duplicateIds, error: deactivateError?.message ?? null };
+  return { activeConnectionId: connectionId, duplicateIds, error: deactivateError?.message ?? null };
 }
 
 async function findExistingMt5Trade({
@@ -609,6 +657,7 @@ export async function syncMt5Trades(
   payload: Mt5SyncPayload,
 ): Promise<Mt5SyncResult | Mt5SyncError> {
   const apiKey = stringValue(payload.apiKey);
+  const apiKeyHash = hashMt5ApiKey(apiKey);
 
   if (!apiKey) {
     return { error: "Invalid API key.", status: 401 };
@@ -639,6 +688,7 @@ export async function syncMt5Trades(
 
   const duplicateResult = await deactivateDuplicateConnections({
     accountNumber,
+    apiKeyHash,
     broker,
     connectionId: connection.id,
     supabase,
@@ -648,6 +698,8 @@ export async function syncMt5Trades(
   if (duplicateResult.error) {
     return { error: duplicateResult.error, status: 400 };
   }
+
+  const activeConnectionId = duplicateResult.activeConnectionId;
 
   const { data: rulesData, error: rulesError } = await supabase
     .from("trading_rules")
@@ -684,7 +736,7 @@ export async function syncMt5Trades(
     const tradeInput = mapMt5Trade({
       accountNumber,
       broker,
-      connectionId: connection.id,
+      connectionId: activeConnectionId,
       rawTrade: item as Mt5TradePayload,
       rules: (rulesData as RuleSettings | null) ?? null,
       userId: connection.user_id,
@@ -701,7 +753,7 @@ export async function syncMt5Trades(
     const { data: existingTrade, error: existingTradeError } = await findExistingMt5Trade({
       accountNumber,
       broker,
-      connectionId: connection.id,
+      connectionId: activeConnectionId,
       mt5Ticket: tradeInput.mt5_ticket,
       supabase,
       userId: connection.user_id,
@@ -735,7 +787,7 @@ export async function syncMt5Trades(
       const { data: existingTrade, error: existingTradeError } = await findExistingMt5Trade({
         accountNumber,
         broker,
-        connectionId: connection.id,
+        connectionId: activeConnectionId,
         mt5Ticket: tradeInput.mt5_ticket,
         supabase,
         userId: connection.user_id,
@@ -750,7 +802,7 @@ export async function syncMt5Trades(
         ? await retryQuery.eq("id", existingTrade.id)
         : await retryQuery
             .eq("user_id", connection.user_id)
-            .eq("mt5_connection_id", connection.id)
+            .eq("mt5_connection_id", activeConnectionId)
             .eq("mt5_ticket", tradeInput.mt5_ticket);
 
       if (existingTradeError || retryUpdateError) {
@@ -785,7 +837,7 @@ export async function syncMt5Trades(
       last_sync_at: syncedAt,
       is_active: true,
     })
-    .eq("id", connection.id);
+    .eq("id", activeConnectionId);
 
   if (syncUpdateError) {
     return { error: syncUpdateError.message, status: 400 };
@@ -793,14 +845,14 @@ export async function syncMt5Trades(
 
   await supabase
     .from("profiles")
-    .update({ selected_mt5_connection_id: connection.id })
+    .update({ selected_mt5_connection_id: activeConnectionId })
     .eq("id", connection.user_id)
     .is("selected_mt5_connection_id", null);
 
   if (duplicateResult.duplicateIds.length) {
     await supabase
       .from("profiles")
-      .update({ selected_mt5_connection_id: connection.id })
+      .update({ selected_mt5_connection_id: activeConnectionId })
       .eq("id", connection.user_id)
       .in("selected_mt5_connection_id", duplicateResult.duplicateIds);
   }
