@@ -48,7 +48,12 @@ function getConnectionName(connection: Mt5ConnectionStatus) {
 export function Mt5SyncPanel({ connections, pendingRequests, syncUrl }: Mt5SyncPanelProps) {
   const [state, formAction, pending] = useActionState<GenerateMt5ApiKeyState, FormData>(generateMt5ApiKeyAction, {});
   const [copied, setCopied] = useState<"key" | "url" | null>(null);
-  const visibleConnections = state.connection ? [state.connection, ...connections] : connections;
+  const visibleConnections = state.connection
+    ? [state.connection, ...connections.filter((connection) => connection.id !== state.connection?.id)]
+    : connections;
+  const hasPendingConnection = visibleConnections.some(
+    (connection) => !connection.account_number && !connection.last_sync_at,
+  );
   const apiKey = state.apiKey;
 
   async function copyValue(value: string, type: "key" | "url") {
@@ -69,7 +74,7 @@ export function Mt5SyncPanel({ connections, pendingRequests, syncUrl }: Mt5SyncP
         <CardContent className="space-y-5">
           <form action={formAction}>
             <Button type="submit" disabled={pending}>
-              {pending ? "Generating..." : "Generate connection key"}
+              {pending ? "Generating..." : hasPendingConnection ? "Regenerate unused key" : "Generate connection key"}
             </Button>
           </form>
 

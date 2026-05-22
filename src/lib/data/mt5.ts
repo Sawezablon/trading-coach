@@ -41,7 +41,11 @@ export async function getMt5Connections(): Promise<Mt5ConnectionStatus[]> {
     throw new Error(error.message);
   }
 
-  return (data ?? []) as Mt5ConnectionStatus[];
+  const connections = (data ?? []) as Mt5ConnectionStatus[];
+  const syncedConnections = connections.filter((connection) => connection.account_number || connection.last_sync_at);
+  const pendingConnection = connections.find((connection) => !connection.account_number && !connection.last_sync_at);
+
+  return pendingConnection ? [...syncedConnections, pendingConnection] : syncedConnections;
 }
 
 export async function getMt5Connection(): Promise<Mt5ConnectionStatus | null> {

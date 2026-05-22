@@ -64,13 +64,50 @@ export async function generateMt5ApiKeyAction(
     return { error: profileError.message };
   }
 
-  const { data, error } = await supabase
+  const { data: pendingConnections, error: pendingLookupError } = await supabase
     .from("mt5_connections")
-    .insert({
-      user_id: user.id,
-      api_key_hash: apiKeyHash,
-      is_active: true,
-    })
+    .select("id, created_at")
+    .eq("user_id", user.id)
+    .eq("is_active", true)
+    .is("account_number", null)
+    .is("last_sync_at", null)
+    .order("created_at", { ascending: false });
+
+  if (pendingLookupError) {
+    return { error: pendingLookupError.message };
+  }
+
+  const pendingConnection = pendingConnections?.[0];
+  const stalePendingIds = (pendingConnections ?? []).slice(1).map((connection) => connection.id);
+
+  if (stalePendingIds.length) {
+    const { error: stalePendingError } = await supabase
+      .from("mt5_connections")
+      .update({ is_active: false })
+      .in("id", stalePendingIds)
+      .eq("user_id", user.id);
+
+    if (stalePendingError) {
+      return { error: stalePendingError.message };
+    }
+  }
+
+  const mutation = pendingConnection
+    ? supabase
+        .from("mt5_connections")
+        .update({
+          api_key_hash: apiKeyHash,
+          is_active: true,
+        })
+        .eq("id", pendingConnection.id)
+        .eq("user_id", user.id)
+    : supabase.from("mt5_connections").insert({
+        user_id: user.id,
+        api_key_hash: apiKeyHash,
+        is_active: true,
+      });
+
+  const { data, error } = await mutation
     .select("id, account_number, broker, account_nickname, prop_firm, last_sync_at, is_active, created_at, updated_at")
     .single();
 
