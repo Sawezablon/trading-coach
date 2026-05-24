@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { APP_CONFIG } from "@/config/app-config";
 
+import { PasswordRecoverySession } from "../../_components/password-recovery-session";
 import { ResetPasswordForm } from "../../_components/reset-password-form";
 
 export default function ResetPasswordPage() {
@@ -12,6 +13,7 @@ export default function ResetPasswordPage() {
           <h1 className="font-medium text-3xl">Choose a new password</h1>
           <p className="text-muted-foreground text-sm">Use the reset link from your email before updating.</p>
         </div>
+        <PasswordRecoverySession />
         <ResetPasswordForm />
       </div>
 
