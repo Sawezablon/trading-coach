@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { CircleHelp, ClipboardList, Database, File, Search, Settings } from "lucide-react";
+import { CircleHelp, ClipboardList, Database, File, Search, Settings, ShieldCheck } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 
 import {
@@ -60,9 +60,11 @@ const _data = {
 };
 
 export function AppSidebar({
+  isAdmin = false,
   user,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
+  isAdmin?: boolean;
   user: {
     name: string;
     email: string;
@@ -79,6 +81,22 @@ export function AppSidebar({
 
   const variant = isSynced ? sidebarVariant : props.variant;
   const collapsible = isSynced ? sidebarCollapsible : props.collapsible;
+  const navItems = isAdmin
+    ? [
+        ...sidebarItems,
+        {
+          id: 2,
+          label: "Owner",
+          items: [
+            {
+              title: "Admin",
+              url: "/dashboard/admin",
+              icon: ShieldCheck,
+            },
+          ],
+        },
+      ]
+    : sidebarItems;
 
   return (
     <Sidebar {...props} variant={variant} collapsible={collapsible}>
@@ -97,7 +115,7 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={sidebarItems} />
+        <NavMain items={navItems} />
         {/* <NavDocuments items={data.documents} /> */}
         {/* <NavSecondary items={data.navSecondary} className="mt-auto" /> */}
       </SidebarContent>

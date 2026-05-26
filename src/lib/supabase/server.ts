@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 
 import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 
 import { env, hasSupabaseEnv } from "@/lib/env";
 import type { Database } from "@/lib/supabase/types";
@@ -26,6 +27,19 @@ export async function createSupabaseServerClient() {
           // Server Components cannot set cookies. Route handlers and actions can.
         }
       },
+    },
+  });
+}
+
+export function createSupabaseServiceRoleClient() {
+  if (!(env.supabaseUrl && env.supabaseServiceRoleKey)) {
+    return null;
+  }
+
+  return createClient<Database>(env.supabaseUrl, env.supabaseServiceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
     },
   });
 }

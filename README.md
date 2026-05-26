@@ -15,6 +15,7 @@ Qyvex Edge is not a trading bot, signal provider, prediction platform, broker in
 - Rules settings for system checks and user checklist rules
 - Performance Plan settings for monthly targets, drawdown limits, trade caps, and review standards
 - In-app feedback reports for bugs, confusing UX, and improvement ideas
+- Owner-only admin dashboard for platform health, user activity, MT5 sync status, and feedback triage
 - Deterministic rule engine for checklist pass/fail and MT5 system-review checks
 - MT5 read-only sync foundation with multi-account support, duplicate protection, manual resync requests, and imported-trade review workflow
 - AI analysis pipeline using OpenAI when configured
@@ -51,6 +52,7 @@ Fill in:
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
+ADMIN_EMAILS=
 OPENAI_API_KEY=
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
@@ -161,6 +163,7 @@ Then fill `.env.local`:
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
+ADMIN_EMAILS=owner@example.com
 OPENAI_API_KEY=
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
@@ -182,6 +185,10 @@ NEXT_PUBLIC_MT5_SYNC_URL=https://sync.qyvexedge.com/api/mt5/sync
 
 Feedback submitted in-app is stored in `feedback_reports`. Users can see reports submitted from their own account in
 **Settings > Feedback**. For V1.0, owner-wide triage can be reviewed directly in Supabase.
+
+Admin dashboard access is controlled by `ADMIN_EMAILS`, a comma-separated list of owner emails. Admin users can open
+`/dashboard/admin` to view platform counts, recent users, MT5 sync health, and feedback triage. The page also requires
+`SUPABASE_SERVICE_ROLE_KEY` because it reads owner-wide data through a server-only service role client.
 
 ## AI Setup
 
@@ -219,6 +226,7 @@ https://www.qyvexedge.com/**
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
+ADMIN_EMAILS=
 OPENAI_API_KEY=
 NEXT_PUBLIC_APP_URL=https://qyvexedge.com
 NEXT_PUBLIC_MT5_SYNC_URL=https://sync.qyvexedge.com/api/mt5/sync
