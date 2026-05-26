@@ -9,7 +9,7 @@ export default async function AdminDashboardPage() {
   const data = await getAdminDashboardData();
 
   if (!data.authorized) {
-    redirect("/unauthorized");
+    redirect(`/unauthorized?reason=${data.authorizationReason}`);
   }
 
   return <AdminDashboard data={data} />;

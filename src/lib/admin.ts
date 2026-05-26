@@ -2,8 +2,14 @@ import { env } from "@/lib/env";
 
 export function getAdminEmails() {
   return env.adminEmails
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
+    .split(/[,\n;]/)
+    .map((email) =>
+      email
+        .trim()
+        .replace(/^["']|["']$/g, "")
+        .trim()
+        .toLowerCase(),
+    )
     .filter(Boolean);
 }
 

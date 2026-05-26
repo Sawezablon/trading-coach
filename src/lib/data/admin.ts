@@ -14,6 +14,7 @@ export type AdminProfile = {
 
 export type AdminDashboardData = {
   authorized: boolean;
+  authorizationReason: "allowed" | "email_not_allowed" | "missing_session" | "missing_supabase";
   configurationError: string;
   counts: {
     activeMt5Connections: number;
@@ -46,6 +47,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
   if (!supabase) {
     return getEmptyAdminDashboardData({
       authorized: false,
+      authorizationReason: "missing_supabase",
       configurationError: "Supabase authentication is not configured.",
     });
   }
@@ -54,8 +56,20 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!isAdminEmail(user?.email)) {
-    return getEmptyAdminDashboardData({ authorized: false, configurationError: "" });
+  if (!user) {
+    return getEmptyAdminDashboardData({
+      authorized: false,
+      authorizationReason: "missing_session",
+      configurationError: "",
+    });
+  }
+
+  if (!isAdminEmail(user.email)) {
+    return getEmptyAdminDashboardData({
+      authorized: false,
+      authorizationReason: "email_not_allowed",
+      configurationError: "",
+    });
   }
 
   const service = createSupabaseServiceRoleClient();
@@ -63,6 +77,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
   if (!service) {
     return getEmptyAdminDashboardData({
       authorized: true,
+      authorizationReason: "allowed",
       configurationError: "SUPABASE_SERVICE_ROLE_KEY is required for the admin dashboard.",
     });
   }
@@ -99,6 +114,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
 
   return {
     authorized: true,
+    authorizationReason: "allowed",
     configurationError: firstError([
       profilesCount.error?.message,
       tradesCount.error?.message,
@@ -125,13 +141,16 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
 
 function getEmptyAdminDashboardData({
   authorized,
+  authorizationReason,
   configurationError,
 }: {
   authorized: boolean;
+  authorizationReason: AdminDashboardData["authorizationReason"];
   configurationError: string;
 }): AdminDashboardData {
   return {
     authorized,
+    authorizationReason,
     configurationError,
     counts: emptyCounts,
     feedback: [],

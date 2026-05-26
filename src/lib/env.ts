@@ -5,7 +5,7 @@ export const env = {
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL ?? "",
   supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
-  adminEmails: process.env.ADMIN_EMAILS ?? "",
+  adminEmails: process.env.ADMIN_EMAILS ?? process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "",
   openaiApiKey: process.env.OPENAI_API_KEY ?? "",
   appUrl,
   mt5SyncUrl,
