@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { APP_CONFIG } from "@/config/app-config";
 import { isAdminEmail } from "@/lib/admin";
+import { getTeamAccess } from "@/lib/data/team";
 import { getSessionUser } from "@/lib/data/trades";
 import { SIDEBAR_COLLAPSIBLE_VALUES, SIDEBAR_VARIANT_VALUES } from "@/lib/preferences/layout";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
     getPreference("sidebar_collapsible", SIDEBAR_COLLAPSIBLE_VALUES, "icon"),
   ]);
   const sessionUser = await getSessionUser();
+  const teamAccess = await getTeamAccess();
   const displayName = sessionUser.email ? sessionUser.email.split("@")[0] : "Trader";
   const isAdmin = isAdminEmail(sessionUser.email);
 
@@ -40,6 +42,7 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
         variant={variant}
         collapsible={collapsible}
         isAdmin={isAdmin}
+        isTeamMember={Boolean(teamAccess?.canViewWork)}
         user={{
           name: displayName,
           email: sessionUser.email || "demo@qyvex.com",

@@ -61,10 +61,12 @@ const _data = {
 
 export function AppSidebar({
   isAdmin = false,
+  isTeamMember = false,
   user,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   isAdmin?: boolean;
+  isTeamMember?: boolean;
   user: {
     name: string;
     email: string;
@@ -81,22 +83,53 @@ export function AppSidebar({
 
   const variant = isSynced ? sidebarVariant : props.variant;
   const collapsible = isSynced ? sidebarCollapsible : props.collapsible;
-  const navItems = isAdmin
-    ? [
-        ...sidebarItems,
-        {
-          id: 2,
-          label: "Owner",
-          items: [
-            {
-              title: "Admin",
-              url: "/dashboard/admin",
-              icon: ShieldCheck,
-            },
-          ],
-        },
-      ]
-    : sidebarItems;
+  const navItems = [
+    ...sidebarItems,
+    ...(isTeamMember
+      ? [
+          {
+            id: 2,
+            label: "Team",
+            items: [
+              {
+                title: "My Work",
+                url: "/dashboard/work",
+                icon: ClipboardList,
+              },
+            ],
+          },
+        ]
+      : []),
+    ...(isAdmin
+      ? [
+          {
+            id: 3,
+            label: "Owner",
+            items: [
+              {
+                title: "Admin",
+                url: "/dashboard/admin",
+                icon: ShieldCheck,
+                subItems: [
+                  {
+                    title: "Overview",
+                    url: "/dashboard/admin",
+                  },
+                  {
+                    title: "Team",
+                    url: "/dashboard/admin/team",
+                  },
+                  {
+                    title: "Tasks",
+                    url: "/dashboard/admin/tasks",
+                  },
+                ],
+              },
+            ],
+          },
+        ]
+      : []),
+  ];
 
   return (
     <Sidebar {...props} variant={variant} collapsible={collapsible}>

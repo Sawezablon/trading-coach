@@ -33,6 +33,12 @@ export function AdminDashboard({ data }: { data: AdminDashboardData }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline">
+              <Link href="/dashboard/admin/team">Manage team</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/admin/tasks">Assign work</Link>
+            </Button>
+            <Button asChild variant="outline">
               <Link href="/dashboard/settings/feedback">User feedback view</Link>
             </Button>
             <Button asChild>

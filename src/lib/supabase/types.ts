@@ -181,6 +181,56 @@ export type FeedbackReport = {
   updated_at: string;
 };
 
+export type TeamRole = "owner" | "admin" | "manager" | "staff" | "viewer";
+export type TeamMemberStatus = "active" | "inactive" | "invited";
+export type TeamTaskPriority = "low" | "medium" | "high" | "urgent";
+export type TeamTaskStatus = "todo" | "in_progress" | "blocked" | "submitted" | "approved" | "done";
+export type TeamTaskType = "general" | "bug" | "feature" | "qa" | "content" | "support" | "design" | "ops";
+export type TaskCommentKind = "comment" | "submission" | "approval" | "revision" | "status";
+
+export type TeamMember = {
+  id: string;
+  user_id: string | null;
+  email: string;
+  full_name: string | null;
+  role: TeamRole;
+  job_title: string | null;
+  status: TeamMemberStatus;
+  invited_by: string | null;
+  invited_at: string;
+  joined_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TeamTask = {
+  id: string;
+  title: string;
+  description: string;
+  priority: TeamTaskPriority;
+  status: TeamTaskStatus;
+  task_type: TeamTaskType;
+  created_by: string | null;
+  assigned_to: string | null;
+  related_feedback_id: string | null;
+  page_url: string | null;
+  due_at: string | null;
+  submitted_at: string | null;
+  approved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TaskComment = {
+  id: string;
+  task_id: string;
+  author_user_id: string | null;
+  author_email: string | null;
+  kind: TaskCommentKind;
+  body: string;
+  created_at: string;
+};
+
 export type ChecklistItemResult = {
   id: string;
   label: string;
@@ -288,6 +338,24 @@ export type Database = {
         Insert: Partial<FeedbackReport> &
           Pick<FeedbackReport, "user_id" | "type" | "category" | "severity" | "message">;
         Update: Partial<FeedbackReport>;
+        Relationships: [];
+      };
+      team_members: {
+        Row: TeamMember;
+        Insert: Partial<TeamMember> & Pick<TeamMember, "email">;
+        Update: Partial<TeamMember>;
+        Relationships: [];
+      };
+      team_tasks: {
+        Row: TeamTask;
+        Insert: Partial<TeamTask> & Pick<TeamTask, "title" | "description">;
+        Update: Partial<TeamTask>;
+        Relationships: [];
+      };
+      task_comments: {
+        Row: TaskComment;
+        Insert: Partial<TaskComment> & Pick<TaskComment, "task_id" | "body">;
+        Update: Partial<TaskComment>;
         Relationships: [];
       };
     };
