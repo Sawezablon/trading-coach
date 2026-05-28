@@ -6,6 +6,14 @@ import { submitTeamTaskUpdateAction } from "@/app/(main)/dashboard/admin/tasks/a
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { TeamTaskWithRelations } from "@/lib/data/team";
@@ -49,64 +57,90 @@ export function MyWork({ tasks }: { tasks: TeamTaskWithRelations[] }) {
 
 function WorkTaskCard({ task }: { task: TeamTaskWithRelations }) {
   return (
-    <article className="rounded-2xl border bg-secondary/35 p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge>{task.status.replaceAll("_", " ")}</Badge>
-        <Badge variant="outline">{task.priority}</Badge>
-        <Badge variant="secondary">{task.task_type}</Badge>
-        {task.due_at ? (
-          <span className="ml-auto text-muted-foreground text-xs">Due {formatDate(task.due_at)}</span>
-        ) : null}
-      </div>
-      <h2 className="mt-3 font-semibold text-lg">{task.title}</h2>
-      <p className="mt-2 whitespace-pre-wrap text-muted-foreground text-sm leading-6">{task.description}</p>
+    <article className="rounded-2xl border bg-secondary/35 p-4 transition hover:border-primary/30 hover:bg-card/80">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge>{task.status.replaceAll("_", " ")}</Badge>
+            <Badge variant="outline">{task.priority}</Badge>
+            <Badge variant="secondary">{task.task_type}</Badge>
+          </div>
+          <h2 className="mt-3 truncate font-semibold text-base">{task.title}</h2>
+          {task.due_at ? <div className="mt-2 text-muted-foreground text-xs">Due {formatDate(task.due_at)}</div> : null}
+        </div>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="outline">View</Button>
+          </DialogTrigger>
+          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{task.title}</DialogTitle>
+              <DialogDescription>
+                {task.priority} priority - {task.status.replaceAll("_", " ")}
+              </DialogDescription>
+            </DialogHeader>
 
-      {task.comments.length ? (
-        <div className="mt-4 space-y-2">
-          {task.comments.slice(0, 3).map((comment) => (
-            <div className="rounded-2xl border bg-background/35 p-3" key={comment.id}>
-              <div className="flex items-center justify-between gap-3 text-xs">
-                <span className="font-medium capitalize">{comment.kind}</span>
-                <span className="text-muted-foreground">{formatDate(comment.created_at)}</span>
-              </div>
-              <p className="mt-2 whitespace-pre-wrap text-muted-foreground text-sm">{comment.body}</p>
+            <div className="flex flex-wrap gap-2">
+              <Badge>{task.status.replaceAll("_", " ")}</Badge>
+              <Badge variant="outline">{task.task_type}</Badge>
+              {task.due_at ? <Badge variant="secondary">Due {formatDate(task.due_at)}</Badge> : null}
             </div>
-          ))}
-        </div>
-      ) : null}
 
-      <form action={submitTeamTaskUpdateAction} className="mt-4 space-y-3 rounded-2xl border bg-background/35 p-3">
-        <input name="id" type="hidden" value={task.id} />
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-          <div className="space-y-2">
-            <Label htmlFor={`body-${task.id}`}>Work update</Label>
-            <Textarea
-              id={`body-${task.id}`}
-              name="body"
-              placeholder="What changed, what is blocked, or what should be reviewed?"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={`status-${task.id}`}>New status</Label>
-            <select
-              className="flex h-10 w-full rounded-xl border border-input bg-secondary/70 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25"
-              defaultValue={task.status === "todo" ? "in_progress" : task.status}
-              id={`status-${task.id}`}
-              name="status"
-            >
-              {teamTaskStatuses
-                .filter((status) => !["approved", "done"].includes(status))
-                .map((status) => (
-                  <option key={status} value={status}>
-                    {status.replaceAll("_", " ")}
-                  </option>
+            <section className="rounded-2xl border bg-secondary/35 p-4">
+              <div className="font-medium text-sm">Assignment</div>
+              <p className="mt-3 whitespace-pre-wrap text-muted-foreground text-sm leading-6">
+                {task.description || "No description added."}
+              </p>
+            </section>
+
+            {task.comments.length ? (
+              <section className="space-y-2">
+                <div className="font-medium text-sm">Recent updates</div>
+                {task.comments.slice(0, 5).map((comment) => (
+                  <div className="rounded-2xl border bg-background/35 p-3" key={comment.id}>
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <span className="font-medium capitalize">{comment.kind}</span>
+                      <span className="text-muted-foreground">{formatDate(comment.created_at)}</span>
+                    </div>
+                    <p className="mt-2 whitespace-pre-wrap text-muted-foreground text-sm">{comment.body}</p>
+                  </div>
                 ))}
-            </select>
-          </div>
-        </div>
-        <Button type="submit">Submit update</Button>
-      </form>
+              </section>
+            ) : null}
+
+            <form action={submitTeamTaskUpdateAction} className="space-y-3 rounded-2xl border bg-background/35 p-4">
+              <input name="id" type="hidden" value={task.id} />
+              <div className="space-y-2">
+                <Label htmlFor={`body-${task.id}`}>Work update</Label>
+                <Textarea
+                  id={`body-${task.id}`}
+                  name="body"
+                  placeholder="What changed, what is blocked, or what should be reviewed?"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`status-${task.id}`}>New status</Label>
+                <select
+                  className="flex h-10 w-full rounded-xl border border-input bg-secondary/70 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25"
+                  defaultValue={task.status === "todo" ? "in_progress" : task.status}
+                  id={`status-${task.id}`}
+                  name="status"
+                >
+                  {teamTaskStatuses
+                    .filter((status) => !["approved", "done"].includes(status))
+                    .map((status) => (
+                      <option key={status} value={status}>
+                        {status.replaceAll("_", " ")}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <Button type="submit">Submit update</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
     </article>
   );
 }

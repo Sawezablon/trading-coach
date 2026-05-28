@@ -8,6 +8,14 @@ import { createTeamTaskAction, updateTeamTaskStatusAction } from "@/app/(main)/d
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -143,49 +151,95 @@ function TaskCard({ task }: { task: TeamTaskWithRelations }) {
   const latestSubmission = task.comments.find((comment) => comment.kind === "submission");
 
   return (
-    <article className="rounded-2xl border bg-secondary/35 p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+    <article className="rounded-2xl border bg-secondary/35 p-4 transition hover:border-primary/30 hover:bg-card/80">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Badge>{task.status.replaceAll("_", " ")}</Badge>
             <Badge variant="outline">{task.priority}</Badge>
             <Badge variant="secondary">{task.task_type}</Badge>
           </div>
-          <h2 className="mt-3 font-semibold text-lg">{task.title}</h2>
-          <p className="mt-2 whitespace-pre-wrap text-muted-foreground text-sm leading-6">{task.description}</p>
-          <div className="mt-3 text-muted-foreground text-xs">
-            Assigned to {task.assignee?.full_name ?? task.assignee?.email ?? "Unassigned"}
+          <h2 className="mt-3 truncate font-semibold text-base">{task.title}</h2>
+          <div className="mt-2 text-muted-foreground text-xs">
+            {task.assignee?.full_name ?? task.assignee?.email ?? "Unassigned"}
             {task.due_at ? ` - Due ${formatDate(task.due_at)}` : ""}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {teamTaskStatuses.map((status) => (
-            <form action={updateTeamTaskStatusAction} key={status}>
-              <input name="id" type="hidden" value={task.id} />
-              <input name="status" type="hidden" value={status} />
-              <Button disabled={task.status === status} size="sm" type="submit" variant="outline">
-                {task.status === status ? <Check className="size-3.5" /> : null}
-                {status.replaceAll("_", " ")}
-              </Button>
-            </form>
-          ))}
-        </div>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="outline">View</Button>
+          </DialogTrigger>
+          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{task.title}</DialogTitle>
+              <DialogDescription>
+                {task.assignee?.full_name ?? task.assignee?.email ?? "Unassigned"} - {task.priority} priority
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex flex-wrap gap-2">
+              <Badge>{task.status.replaceAll("_", " ")}</Badge>
+              <Badge variant="outline">{task.task_type}</Badge>
+              {task.due_at ? <Badge variant="secondary">Due {formatDate(task.due_at)}</Badge> : null}
+            </div>
+
+            <section className="rounded-2xl border bg-secondary/35 p-4">
+              <div className="font-medium text-sm">Description</div>
+              <p className="mt-3 whitespace-pre-wrap text-muted-foreground text-sm leading-6">
+                {task.description || "No description added."}
+              </p>
+            </section>
+
+            {task.feedback ? (
+              <section className="rounded-2xl border bg-background/35 p-4">
+                <div className="flex items-center gap-2 text-primary text-xs">
+                  <MessageSquareDot className="size-3.5" />
+                  Linked feedback
+                </div>
+                <p className="mt-2 text-muted-foreground text-sm">{task.feedback.title ?? task.feedback.message}</p>
+              </section>
+            ) : null}
+
+            {latestSubmission ? (
+              <section className="rounded-2xl border border-[#22C55E]/20 bg-[#22C55E]/10 p-4">
+                <div className="font-medium text-[#22C55E] text-sm">Latest submission</div>
+                <p className="mt-2 whitespace-pre-wrap text-sm">{latestSubmission.body}</p>
+              </section>
+            ) : null}
+
+            {task.comments.length ? (
+              <section className="space-y-2">
+                <div className="font-medium text-sm">Activity</div>
+                {task.comments.slice(0, 5).map((comment) => (
+                  <div className="rounded-2xl border bg-secondary/35 p-3" key={comment.id}>
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <span className="font-medium capitalize">{comment.kind}</span>
+                      <span className="text-muted-foreground">{formatDate(comment.created_at)}</span>
+                    </div>
+                    <p className="mt-2 whitespace-pre-wrap text-muted-foreground text-sm">{comment.body}</p>
+                  </div>
+                ))}
+              </section>
+            ) : null}
+
+            <section className="rounded-2xl border bg-secondary/35 p-4">
+              <div className="mb-3 font-medium text-sm">Change status</div>
+              <div className="flex flex-wrap gap-2">
+                {teamTaskStatuses.map((status) => (
+                  <form action={updateTeamTaskStatusAction} key={status}>
+                    <input name="id" type="hidden" value={task.id} />
+                    <input name="status" type="hidden" value={status} />
+                    <Button disabled={task.status === status} size="sm" type="submit" variant="outline">
+                      {task.status === status ? <Check className="size-3.5" /> : null}
+                      {status.replaceAll("_", " ")}
+                    </Button>
+                  </form>
+                ))}
+              </div>
+            </section>
+          </DialogContent>
+        </Dialog>
       </div>
-      {task.feedback ? (
-        <div className="mt-4 rounded-2xl border bg-background/35 p-3">
-          <div className="flex items-center gap-2 text-primary text-xs">
-            <MessageSquareDot className="size-3.5" />
-            Linked feedback
-          </div>
-          <p className="mt-2 text-muted-foreground text-sm">{task.feedback.title ?? task.feedback.message}</p>
-        </div>
-      ) : null}
-      {latestSubmission ? (
-        <div className="mt-4 rounded-2xl border border-[#22C55E]/20 bg-[#22C55E]/10 p-3">
-          <div className="font-medium text-[#22C55E] text-sm">Latest submission</div>
-          <p className="mt-2 whitespace-pre-wrap text-sm">{latestSubmission.body}</p>
-        </div>
-      ) : null}
     </article>
   );
 }
