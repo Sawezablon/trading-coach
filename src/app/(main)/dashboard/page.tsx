@@ -149,11 +149,44 @@ function getMonthLabel(date = new Date()) {
   return new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(date);
 }
 
-function isCurrentMonth(value: string) {
-  const date = new Date(value);
-  const now = new Date();
+function getMonthKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
 
-  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+function getDashboardMonthHref(date: Date) {
+  return `/dashboard?month=${getMonthKey(date)}`;
+}
+
+function getSelectedMonth(month?: string) {
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+    return new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  }
+
+  const [year, monthIndex] = month.split("-").map(Number);
+  const selectedMonth = new Date(year, monthIndex - 1, 1);
+
+  if (Number.isNaN(selectedMonth.getTime())) {
+    return new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  }
+
+  return selectedMonth;
+}
+
+function addMonths(date: Date, amount: number) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function isSameMonth(value: string, selectedMonth: Date) {
+  const date = new Date(value);
+
+  return date.getFullYear() === selectedMonth.getFullYear() && date.getMonth() === selectedMonth.getMonth();
+}
+
+function isAfterCurrentMonth(date: Date) {
+  const now = new Date();
+  const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  return date.getTime() > currentMonth.getTime();
 }
 
 function getTradeProfitPercent(trade: TradeWithAnalysis) {
@@ -239,8 +272,8 @@ function buildPairPerformance(trades: TradeWithAnalysis[]) {
   ).sort((left, right) => right.profit - left.profit);
 }
 
-function getMonthlyPerformanceModel(trades: TradeWithAnalysis[], plan: PerformancePlan) {
-  const monthTrades = trades.filter((trade) => isCurrentMonth(trade.trade_taken_at));
+function getMonthlyPerformanceModel(trades: TradeWithAnalysis[], plan: PerformancePlan, selectedMonth: Date) {
+  const monthTrades = trades.filter((trade) => isSameMonth(trade.trade_taken_at, selectedMonth));
   const closedTrades = monthTrades.filter((trade) => trade.status === "closed");
   const wins = closedTrades.filter((trade) => trade.outcome === "win").length;
   const losses = closedTrades.filter((trade) => trade.outcome === "loss").length;
@@ -378,7 +411,7 @@ function getMonthlyPerformanceModel(trades: TradeWithAnalysis[], plan: Performan
     losses,
     lossesRemaining,
     losingStreak,
-    monthLabel: getMonthLabel(),
+    monthLabel: getMonthLabel(selectedMonth),
     openTrades,
     pairPerformance,
     pairDiagnosis,
@@ -567,7 +600,7 @@ function getDisciplineIntelligence({
   };
 }
 
-function getDashboardModel(trades: TradeWithAnalysis[], performancePlan: PerformancePlan) {
+function getDashboardModel(trades: TradeWithAnalysis[], performancePlan: PerformancePlan, selectedMonth: Date) {
   const metrics = calculateDashboardMetrics(trades);
   const todayTrades = trades.filter((trade) => isToday(trade.trade_taken_at));
   const todayDiscipline = average(todayTrades.map(getTradeDiscipline));
@@ -605,7 +638,7 @@ function getDashboardModel(trades: TradeWithAnalysis[], performancePlan: Perform
     reviewCompletion,
     trades,
   });
-  const monthlyPerformance = getMonthlyPerformanceModel(trades, performancePlan);
+  const monthlyPerformance = getMonthlyPerformanceModel(trades, performancePlan, selectedMonth);
 
   return {
     behaviorState,
@@ -627,9 +660,11 @@ function getDashboardModel(trades: TradeWithAnalysis[], performancePlan: Perform
   };
 }
 
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   noStore();
 
+  const params = await searchParams;
+  const selectedMonth = getSelectedMonth(params.month);
   const [allTrades, accountContext, performancePlans] = await Promise.all([
     getTrades(),
     getMt5AccountContext(),
@@ -641,7 +676,7 @@ export default async function Page() {
     trades: allTrades,
   });
   const performancePlan = getActivePerformancePlan(performancePlans, selectedConnectionId);
-  const model = getDashboardModel(trades, performancePlan);
+  const model = getDashboardModel(trades, performancePlan, selectedMonth);
 
   return (
     <div className="flex flex-col gap-6 pb-8">
@@ -659,7 +694,7 @@ export default async function Page() {
         <>
           <section className="grid gap-4 xl:grid-cols-12">
             <DisciplineIntelligence model={model} />
-            <PerformanceAnalytics model={model} />
+            <PerformanceAnalytics model={model} selectedMonth={selectedMonth} />
           </section>
 
           <section className="grid gap-4 xl:grid-cols-12">
@@ -982,7 +1017,49 @@ function DisciplineIntelligence({ model }: { model: ReturnType<typeof getDashboa
   );
 }
 
-function PerformanceAnalytics({ model }: { model: ReturnType<typeof getDashboardModel> }) {
+function PerformanceMonthSelector({ selectedMonth }: { selectedMonth: Date }) {
+  const previousMonth = addMonths(selectedMonth, -1);
+  const nextMonth = addMonths(selectedMonth, 1);
+  const canGoNext = !isAfterCurrentMonth(nextMonth);
+  const isCurrentMonth = getMonthKey(selectedMonth) === getMonthKey();
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Button asChild size="sm" variant="outline" className="h-8 w-8 rounded-full p-0">
+        <Link href={getDashboardMonthHref(previousMonth)} aria-label={`View ${getMonthLabel(previousMonth)}`}>
+          {"<"}
+        </Link>
+      </Button>
+      <div className="rounded-full border bg-secondary/60 px-3 py-1.5 font-medium text-sm">
+        {getMonthLabel(selectedMonth)}
+      </div>
+      {canGoNext ? (
+        <Button asChild size="sm" variant="outline" className="h-8 w-8 rounded-full p-0">
+          <Link href={getDashboardMonthHref(nextMonth)} aria-label={`View ${getMonthLabel(nextMonth)}`}>
+            {">"}
+          </Link>
+        </Button>
+      ) : (
+        <Button size="sm" variant="outline" className="h-8 w-8 rounded-full p-0" disabled>
+          {">"}
+        </Button>
+      )}
+      {!isCurrentMonth ? (
+        <Button asChild size="sm" variant="ghost" className="h-8 rounded-full px-3">
+          <Link href="/dashboard">Current</Link>
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function PerformanceAnalytics({
+  model,
+  selectedMonth,
+}: {
+  model: ReturnType<typeof getDashboardModel>;
+  selectedMonth: Date;
+}) {
   const { monthlyPerformance } = model;
   const plan = monthlyPerformance.plan;
   const isDamageControl = monthlyPerformance.status.tone === "danger";
@@ -997,10 +1074,13 @@ function PerformanceAnalytics({ model }: { model: ReturnType<typeof getDashboard
             <CardTitle>{monthlyPerformance.monthLabel} plan tracker</CardTitle>
             <CardDescription>Performance measured against the trading plan, not just wins and losses.</CardDescription>
           </div>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <MiniMetric label="Status" value={monthlyPerformance.status.label} />
-            <MiniMetric label="Profit" value={formatSignedPercent(monthlyPerformance.profitPercent)} />
-            <MiniMetric label="Trades" value={`${monthlyPerformance.totalTrades}/${plan.max_trades_per_month}`} />
+          <div className="flex flex-col gap-3 lg:items-end">
+            <PerformanceMonthSelector selectedMonth={selectedMonth} />
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <MiniMetric label="Status" value={monthlyPerformance.status.label} />
+              <MiniMetric label="Profit" value={formatSignedPercent(monthlyPerformance.profitPercent)} />
+              <MiniMetric label="Trades" value={`${monthlyPerformance.totalTrades}/${plan.max_trades_per_month}`} />
+            </div>
           </div>
         </div>
       </CardHeader>
