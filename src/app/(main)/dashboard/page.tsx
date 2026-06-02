@@ -901,10 +901,10 @@ function DisciplineIntelligence({ model }: { model: ReturnType<typeof getDashboa
         <CardDescription>System checks, review habits, psychology, and checklist behavior in one view.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="grid gap-4 min-[1500px]:grid-cols-[0.9fr_1.1fr]">
           <ScoreRing label="Intelligence score" value={intelligenceScore} />
-          <div className="space-y-3">
-            <div className="rounded-2xl border border-primary/20 bg-primary/10 p-4">
+          <div className="min-w-0 space-y-3">
+            <div className="min-w-0 rounded-2xl border border-primary/20 bg-primary/10 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-muted-foreground text-xs">Primary discipline leak</div>
                 <Badge
@@ -915,11 +915,13 @@ function DisciplineIntelligence({ model }: { model: ReturnType<typeof getDashboa
               </div>
               <div className="mt-2 font-semibold text-lg">{primaryLeak.label}</div>
               <p className="mt-1 text-muted-foreground text-sm">{primaryLeak.detail}</p>
-              <Button asChild size="sm" className="mt-3">
-                <Link href={primaryLeak.href}>{primaryLeak.action}</Link>
+              <Button asChild size="sm" className="mt-3 h-auto max-w-full whitespace-normal px-3 py-2 text-left">
+                <Link className="min-w-0 leading-snug" href={primaryLeak.href}>
+                  {primaryLeak.action}
+                </Link>
               </Button>
             </div>
-            <div className="rounded-2xl border bg-secondary/35 p-3">
+            <div className="min-w-0 rounded-2xl border bg-secondary/35 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-muted-foreground text-xs">Recent trajectory</div>
@@ -1694,16 +1696,16 @@ function TrendDots({ scores }: { scores: number[] }) {
   });
 
   return (
-    <div className="mt-3 flex items-end gap-1.5">
+    <div className="mt-3 flex min-w-0 items-end gap-1.5 overflow-hidden">
       {dots.map((dot) => (
         <div
           key={dot.key}
           className={
             dot.score >= 80
-              ? "h-8 flex-1 rounded-full bg-[#22C55E]/80"
+              ? "h-8 min-w-3 flex-1 rounded-full bg-[#22C55E]/80"
               : dot.score >= 60
-                ? "h-8 flex-1 rounded-full bg-primary/80"
-                : "h-8 flex-1 rounded-full bg-[#F59E0B]/80"
+                ? "h-8 min-w-3 flex-1 rounded-full bg-primary/80"
+                : "h-8 min-w-3 flex-1 rounded-full bg-[#F59E0B]/80"
           }
           style={{ opacity: Math.max(0.35, dot.score / 100) }}
           title={`${dot.score}%`}
