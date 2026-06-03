@@ -15,6 +15,8 @@ input int SyncOverlapMinutes = 10;
 input int ClosedTradeDetailLookupDays = 30;
 input bool EnableQuickReview = true;
 input string FallbackQuickReviewItems = "Confirmation candle closed;No revenge trading;Setup matches plan;Risk accepted";
+input int QuickReviewPanelX = 12;
+input int QuickReviewPanelY = 170;
 
 datetime g_lastSyncTime = 0;
 string g_lastStatus = "Waiting for first sync";
@@ -690,6 +692,7 @@ void UpdateChartStatus()
       "Last sync: ", lastSync, "\n",
       "Status: ", g_lastStatus, "\n",
       "Trades sent: ", IntegerToString(g_lastTradesSent), "\n",
+      "Quick review: ", EnableQuickReview ? "enabled" : "disabled", " | Queue: ", IntegerToString(g_reviewQueueCount), "\n",
       "First history sync: ", FirstSyncDone() ? "done" : "pending", "\n",
       "Manual resync: ", g_resyncRequested ? "pending" : "none", "\n",
       "Sync URL: ", SyncUrl
@@ -989,8 +992,29 @@ void CreateQuickReviewLabel(string name, string text, int x, int y, color textCo
    ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
    ObjectSetInteger(0, name, OBJPROP_COLOR, textColor);
    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
+   ObjectSetInteger(0, name, OBJPROP_BACK, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_ZORDER, 1000);
    ObjectSetString(0, name, OBJPROP_FONT, "Arial");
    ObjectSetString(0, name, OBJPROP_TEXT, text);
+}
+
+void CreateQuickReviewBackground(int x, int y, int width, int height)
+{
+   string name = "QYVEX_QR_BACKGROUND";
+   ObjectCreate(0, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x - 8);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y - 8);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, width);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, height);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, clrBlack);
+   ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, clrMediumPurple);
+   ObjectSetInteger(0, name, OBJPROP_BACK, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_ZORDER, 900);
 }
 
 void CreateQuickReviewButton(string name, string text, int x, int y, int width, color backgroundColor)
@@ -1005,6 +1029,10 @@ void CreateQuickReviewButton(string name, string text, int x, int y, int width, 
    ObjectSetInteger(0, name, OBJPROP_COLOR, clrWhite);
    ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, clrDimGray);
    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 7);
+   ObjectSetInteger(0, name, OBJPROP_BACK, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_ZORDER, 1100);
    ObjectSetString(0, name, OBJPROP_FONT, "Arial");
    ObjectSetString(0, name, OBJPROP_TEXT, text);
 }
@@ -1018,8 +1046,10 @@ void RenderQuickReviewPanel()
 
    BuildReviewQueue();
    string ticket = g_quickReviewTicket;
-   int x = 12;
-   int y = 142;
+   int x = QuickReviewPanelX;
+   int y = QuickReviewPanelY;
+
+   CreateQuickReviewBackground(x, y, 322, 260);
 
    CreateQuickReviewLabel("QYVEX_QR_TITLE", "Qyvex daily review queue", x, y, clrAqua);
    y += 16;
@@ -1078,6 +1108,7 @@ void SyncNow()
       g_lastStatus = "Missing API key or Sync URL";
       g_lastTradesSent = 0;
       UpdateChartStatus();
+      RenderQuickReviewPanel();
       return;
    }
 
