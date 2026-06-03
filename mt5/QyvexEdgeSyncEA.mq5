@@ -25,6 +25,10 @@ string g_resyncRequestId = "";
 string g_quickReviewTicket = "";
 string g_quickReviewItems[8];
 int g_quickReviewItemCount = 0;
+string g_reviewQueueTickets[20];
+string g_reviewQueueLabels[20];
+int g_reviewQueueCount = 0;
+int g_reviewQueueIndex = 0;
 
 string StateKeyPrefix()
 {
@@ -347,6 +351,20 @@ string BuildQuickReviewJson(string ticket)
    return json;
 }
 
+bool HasQuickReviewData(string ticket)
+{
+   if(GetQuickReviewEmotion(ticket) > 0)
+      return true;
+
+   for(int index = 0; index < g_quickReviewItemCount; index++)
+   {
+      if(GetQuickReviewCheck(ticket, index))
+         return true;
+   }
+
+   return false;
+}
+
 string BuildTradeJson(
    string ticket,
    string symbol,
@@ -566,7 +584,12 @@ int CollectClosedDeals(string &items)
       datetime closeTime = (datetime)HistoryDealGetInteger(dealTicket, DEAL_TIME);
 
       if(closeTime < closedHistoryFrom)
-         continue;
+      {
+         ulong reviewPositionId = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
+
+         if(!HasQuickReviewData(IntegerToString((long)reviewPositionId)))
+            continue;
+      }
 
       ulong positionId = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
       datetime openTime = 0;
@@ -807,29 +830,142 @@ bool SendTradeItems(string tradesJson, int tradesSent)
    return true;
 }
 
-string CurrentOpenReviewTicket()
+bool ReviewQueueHasTicket(string ticket)
 {
-   datetime newestTime = 0;
-   string newestTicket = "";
-   int total = PositionsTotal();
+   for(int index = 0; index < g_reviewQueueCount; index++)
+   {
+      if(g_reviewQueueTickets[index] == ticket)
+         return true;
+   }
 
-   for(int index = 0; index < total; index++)
+   return false;
+}
+
+void AddReviewQueueItem(string ticket, string label)
+{
+   if(ticket == "" || ReviewQueueHasTicket(ticket) || g_reviewQueueCount >= 20)
+      return;
+
+   g_reviewQueueTickets[g_reviewQueueCount] = ticket;
+   g_reviewQueueLabels[g_reviewQueueCount] = label;
+   g_reviewQueueCount++;
+}
+
+string DirectionLabel(string direction)
+{
+   if(direction == "buy")
+      return "Buy";
+
+   if(direction == "sell")
+      return "Sell";
+
+   return "";
+}
+
+datetime TodayStart()
+{
+   return StringToTime(TimeToString(TimeCurrent(), TIME_DATE));
+}
+
+void BuildReviewQueue()
+{
+   string previousTicket = g_quickReviewTicket;
+   g_reviewQueueCount = 0;
+
+   int openTotal = PositionsTotal();
+
+   for(int index = 0; index < openTotal; index++)
    {
       ulong ticket = PositionGetTicket(index);
 
       if(ticket == 0 || !PositionSelectByTicket(ticket))
          continue;
 
-      datetime openTime = (datetime)PositionGetInteger(POSITION_TIME);
+      string direction = DirectionFromPositionType(PositionGetInteger(POSITION_TYPE));
+      string label = PositionGetString(POSITION_SYMBOL) + " " + DirectionLabel(direction) + " open";
+      AddReviewQueueItem(IntegerToString((long)ticket), label);
+   }
 
-      if(openTime >= newestTime)
+   datetime from = TodayStart();
+   datetime to = TimeCurrent();
+
+   if(HistorySelect(from, to))
+   {
+      int total = HistoryDealsTotal();
+
+      for(int dealIndex = total - 1; dealIndex >= 0; dealIndex--)
       {
-         newestTime = openTime;
-         newestTicket = IntegerToString((long)ticket);
+         ulong dealTicket = HistoryDealGetTicket(dealIndex);
+
+         if(dealTicket == 0)
+            continue;
+
+         long dealEntry = HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
+
+         if(!IsClosingEntry(dealEntry))
+            continue;
+
+         long dealType = HistoryDealGetInteger(dealTicket, DEAL_TYPE);
+
+         if(dealType != DEAL_TYPE_BUY && dealType != DEAL_TYPE_SELL)
+            continue;
+
+         ulong positionId = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
+         double profit = HistoryDealGetDouble(dealTicket, DEAL_PROFIT);
+         string status = profit > 0 ? "win" : profit < 0 ? "loss" : "breakeven";
+         string direction = dealType == DEAL_TYPE_SELL ? "Buy" : "Sell";
+         string label = HistoryDealGetString(dealTicket, DEAL_SYMBOL) + " " + direction + " closed " + status;
+         AddReviewQueueItem(IntegerToString((long)positionId), label);
       }
    }
 
-   return newestTicket;
+   if(g_reviewQueueCount <= 0)
+   {
+      g_reviewQueueIndex = 0;
+      g_quickReviewTicket = "";
+      return;
+   }
+
+   int selectedIndex = -1;
+
+   for(int queueIndex = 0; queueIndex < g_reviewQueueCount; queueIndex++)
+   {
+      if(g_reviewQueueTickets[queueIndex] == previousTicket)
+      {
+         selectedIndex = queueIndex;
+         break;
+      }
+   }
+
+   if(selectedIndex < 0)
+      selectedIndex = 0;
+
+   g_reviewQueueIndex = selectedIndex;
+   g_quickReviewTicket = g_reviewQueueTickets[g_reviewQueueIndex];
+}
+
+string CurrentReviewLabel()
+{
+   if(g_reviewQueueCount <= 0 || g_reviewQueueIndex < 0 || g_reviewQueueIndex >= g_reviewQueueCount)
+      return "";
+
+   return g_reviewQueueLabels[g_reviewQueueIndex];
+}
+
+void MoveReviewQueue(int delta)
+{
+   if(g_reviewQueueCount <= 0)
+      return;
+
+   g_reviewQueueIndex += delta;
+
+   if(g_reviewQueueIndex < 0)
+      g_reviewQueueIndex = g_reviewQueueCount - 1;
+
+   if(g_reviewQueueIndex >= g_reviewQueueCount)
+      g_reviewQueueIndex = 0;
+
+   g_quickReviewTicket = g_reviewQueueTickets[g_reviewQueueIndex];
 }
 
 void DeleteQuickReviewObjects()
@@ -880,23 +1016,36 @@ void RenderQuickReviewPanel()
    if(!EnableQuickReview)
       return;
 
-   string ticket = CurrentOpenReviewTicket();
-   g_quickReviewTicket = ticket;
+   BuildReviewQueue();
+   string ticket = g_quickReviewTicket;
    int x = 12;
    int y = 142;
 
-   CreateQuickReviewLabel("QYVEX_QR_TITLE", "Qyvex quick review", x, y, clrAqua);
+   CreateQuickReviewLabel("QYVEX_QR_TITLE", "Qyvex daily review queue", x, y, clrAqua);
    y += 16;
 
    if(ticket == "")
    {
-      CreateQuickReviewLabel("QYVEX_QR_WAITING", "No open trade detected.", x, y, clrSilver);
+      CreateQuickReviewLabel("QYVEX_QR_WAITING", "No open or closed trades found today.", x, y, clrSilver);
       ChartRedraw(0);
       return;
    }
 
-   CreateQuickReviewLabel("QYVEX_QR_TICKET", "Ticket: " + ticket, x, y, clrSilver);
-   y += 18;
+   CreateQuickReviewLabel(
+      "QYVEX_QR_TICKET",
+      "Review " + IntegerToString(g_reviewQueueIndex + 1) + "/" + IntegerToString(g_reviewQueueCount) +
+         " | Ticket: " + ticket,
+      x,
+      y,
+      clrSilver
+   );
+   y += 16;
+   CreateQuickReviewLabel("QYVEX_QR_LABEL", CurrentReviewLabel(), x, y, clrWhite);
+   y += 20;
+
+   CreateQuickReviewButton("QYVEX_QR_PREV", "< Previous", x, y, 88, clrDarkSlateGray);
+   CreateQuickReviewButton("QYVEX_QR_NEXT", "Next >", x + 96, y, 88, clrDarkSlateGray);
+   y += 24;
 
    int emotion = GetQuickReviewEmotion(ticket);
    string emotionLabels[5] = {"Calm", "Patient", "Anxious", "FOMO", "Revenge"};
@@ -976,6 +1125,20 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
 {
    if(id != CHARTEVENT_OBJECT_CLICK || !EnableQuickReview || g_quickReviewTicket == "")
       return;
+
+   if(sparam == "QYVEX_QR_PREV")
+   {
+      MoveReviewQueue(-1);
+      RenderQuickReviewPanel();
+      return;
+   }
+
+   if(sparam == "QYVEX_QR_NEXT")
+   {
+      MoveReviewQueue(1);
+      RenderQuickReviewPanel();
+      return;
+   }
 
    if(StringFind(sparam, "QYVEX_QR_EMOTION_") == 0)
    {
