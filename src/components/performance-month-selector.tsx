@@ -38,6 +38,19 @@ function isAfterCurrentMonth(date: Date) {
   return date.getTime() > currentMonth.getTime();
 }
 
+function getMonthOptions(count = 36) {
+  const currentMonth = getMonthFromKey(getMonthKey());
+
+  return Array.from({ length: count }, (_, index) => {
+    const date = addMonths(currentMonth, -index);
+
+    return {
+      key: getMonthKey(date),
+      label: getMonthLabel(date),
+    };
+  });
+}
+
 export function PerformanceMonthSelector({ selectedMonthKey }: PerformanceMonthSelectorProps) {
   const router = useRouter();
   const selectedMonth = getMonthFromKey(selectedMonthKey);
@@ -46,6 +59,7 @@ export function PerformanceMonthSelector({ selectedMonthKey }: PerformanceMonthS
   const currentMonthKey = getMonthKey();
   const canGoNext = !isAfterCurrentMonth(nextMonth);
   const isCurrentMonth = selectedMonthKey === currentMonthKey;
+  const monthOptions = getMonthOptions();
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -54,25 +68,22 @@ export function PerformanceMonthSelector({ selectedMonthKey }: PerformanceMonthS
           {"<"}
         </Link>
       </Button>
-      <label className="relative inline-flex h-8 cursor-pointer items-center rounded-full border bg-secondary/60 px-3 font-medium text-sm transition-colors hover:border-primary/50 hover:bg-primary/10">
-        <span>{getMonthLabel(selectedMonth)}</span>
-        <input
-          aria-label="Select performance month"
-          className="absolute inset-0 cursor-pointer opacity-0"
-          max={currentMonthKey}
-          onChange={(event) => {
-            const month = event.currentTarget.value;
+      <select
+        aria-label="Select performance month"
+        className="h-8 cursor-pointer rounded-full border bg-secondary/60 px-3 font-medium text-sm outline-none transition-colors hover:border-primary/50 hover:bg-primary/10 focus:border-primary"
+        onChange={(event) => {
+          const month = event.currentTarget.value;
 
-            if (!month) {
-              return;
-            }
-
-            router.push(month === currentMonthKey ? "/dashboard" : `/dashboard?month=${month}`);
-          }}
-          type="month"
-          value={selectedMonthKey}
-        />
-      </label>
+          router.push(month === currentMonthKey ? "/dashboard" : `/dashboard?month=${month}`);
+        }}
+        value={selectedMonthKey}
+      >
+        {monthOptions.map((month) => (
+          <option key={month.key} value={month.key}>
+            {month.label}
+          </option>
+        ))}
+      </select>
       {canGoNext ? (
         <Button asChild size="sm" variant="outline" className="h-8 w-8 rounded-full p-0">
           <Link href={getDashboardMonthHref(nextMonth)} aria-label={`View ${getMonthLabel(nextMonth)}`}>
