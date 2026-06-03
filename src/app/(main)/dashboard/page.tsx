@@ -4,6 +4,7 @@ import { unstable_noStore as noStore } from "next/cache";
 import Link from "next/link";
 
 import { Mt5AccountSwitcher } from "@/components/mt5-account-switcher";
+import { PerformanceMonthSelector } from "@/components/performance-month-selector";
 import { TradeOutcomeBadge, TradeReviewBadge, TradeStatusBadge } from "@/components/trade-lifecycle-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -153,10 +154,6 @@ function getMonthKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function getDashboardMonthHref(date: Date) {
-  return `/dashboard?month=${getMonthKey(date)}`;
-}
-
 function getSelectedMonth(month?: string) {
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
     return new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -172,21 +169,10 @@ function getSelectedMonth(month?: string) {
   return selectedMonth;
 }
 
-function addMonths(date: Date, amount: number) {
-  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
-}
-
 function isSameMonth(value: string, selectedMonth: Date) {
   const date = new Date(value);
 
   return date.getFullYear() === selectedMonth.getFullYear() && date.getMonth() === selectedMonth.getMonth();
-}
-
-function isAfterCurrentMonth(date: Date) {
-  const now = new Date();
-  const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-  return date.getTime() > currentMonth.getTime();
 }
 
 function getTradeProfitPercent(trade: TradeWithAnalysis) {
@@ -1017,42 +1003,6 @@ function DisciplineIntelligence({ model }: { model: ReturnType<typeof getDashboa
   );
 }
 
-function PerformanceMonthSelector({ selectedMonth }: { selectedMonth: Date }) {
-  const previousMonth = addMonths(selectedMonth, -1);
-  const nextMonth = addMonths(selectedMonth, 1);
-  const canGoNext = !isAfterCurrentMonth(nextMonth);
-  const isCurrentMonth = getMonthKey(selectedMonth) === getMonthKey();
-
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button asChild size="sm" variant="outline" className="h-8 w-8 rounded-full p-0">
-        <Link href={getDashboardMonthHref(previousMonth)} aria-label={`View ${getMonthLabel(previousMonth)}`}>
-          {"<"}
-        </Link>
-      </Button>
-      <div className="rounded-full border bg-secondary/60 px-3 py-1.5 font-medium text-sm">
-        {getMonthLabel(selectedMonth)}
-      </div>
-      {canGoNext ? (
-        <Button asChild size="sm" variant="outline" className="h-8 w-8 rounded-full p-0">
-          <Link href={getDashboardMonthHref(nextMonth)} aria-label={`View ${getMonthLabel(nextMonth)}`}>
-            {">"}
-          </Link>
-        </Button>
-      ) : (
-        <Button size="sm" variant="outline" className="h-8 w-8 rounded-full p-0" disabled>
-          {">"}
-        </Button>
-      )}
-      {!isCurrentMonth ? (
-        <Button asChild size="sm" variant="ghost" className="h-8 rounded-full px-3">
-          <Link href="/dashboard">Current</Link>
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
 function PerformanceAnalytics({
   model,
   selectedMonth,
@@ -1075,7 +1025,7 @@ function PerformanceAnalytics({
             <CardDescription>Performance measured against the trading plan, not just wins and losses.</CardDescription>
           </div>
           <div className="flex flex-col gap-3 lg:items-end">
-            <PerformanceMonthSelector selectedMonth={selectedMonth} />
+            <PerformanceMonthSelector selectedMonthKey={getMonthKey(selectedMonth)} />
             <div className="grid grid-cols-3 gap-2 text-center">
               <MiniMetric label="Status" value={monthlyPerformance.status.label} />
               <MiniMetric label="Profit" value={formatSignedPercent(monthlyPerformance.profitPercent)} />
