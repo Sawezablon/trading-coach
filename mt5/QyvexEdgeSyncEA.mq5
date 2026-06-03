@@ -4,7 +4,7 @@
 //| This EA does not place, modify, or close trades.                  |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "1.06"
+#property version   "1.07"
 #property description "Read-only Qyvex Edge trade sync EA."
 
 input string QyvexApiKey = "";
@@ -13,6 +13,8 @@ input int SyncIntervalMinutes = 5;
 input int InitialHistoryLookbackDays = 365;
 input int SyncOverlapMinutes = 10;
 input int ClosedTradeDetailLookupDays = 30;
+input bool EnableQuickReview = true;
+input string FallbackQuickReviewItems = "Confirmation candle closed;No revenge trading;Setup matches plan;Risk accepted";
 
 datetime g_lastSyncTime = 0;
 string g_lastStatus = "Waiting for first sync";
@@ -20,6 +22,9 @@ int g_lastTradesSent = 0;
 bool g_resyncRequested = false;
 int g_resyncLookbackDays = 0;
 string g_resyncRequestId = "";
+string g_quickReviewTicket = "";
+string g_quickReviewItems[8];
+int g_quickReviewItemCount = 0;
 
 string StateKeyPrefix()
 {
@@ -34,6 +39,65 @@ string FirstSyncKey()
 string LastSuccessfulSyncKey()
 {
    return StateKeyPrefix() + "LastSuccessfulSync";
+}
+
+string QuickReviewKey(string ticket, string key)
+{
+   return StateKeyPrefix() + "QuickReview_" + ticket + "_" + key;
+}
+
+double GetQuickReviewValue(string ticket, string key)
+{
+   string globalKey = QuickReviewKey(ticket, key);
+
+   if(!GlobalVariableCheck(globalKey))
+      return 0;
+
+   return GlobalVariableGet(globalKey);
+}
+
+void SetQuickReviewValue(string ticket, string key, double value)
+{
+   if(ticket == "")
+      return;
+
+   GlobalVariableSet(QuickReviewKey(ticket, key), value);
+}
+
+bool GetQuickReviewCheck(string ticket, int index)
+{
+   return GetQuickReviewValue(ticket, "check_" + IntegerToString(index)) > 0;
+}
+
+void ToggleQuickReviewCheck(string ticket, int index)
+{
+   SetQuickReviewValue(ticket, "check_" + IntegerToString(index), GetQuickReviewCheck(ticket, index) ? 0 : 1);
+}
+
+int GetQuickReviewEmotion(string ticket)
+{
+   return (int)GetQuickReviewValue(ticket, "emotion");
+}
+
+void SetQuickReviewEmotion(string ticket, int emotion)
+{
+   SetQuickReviewValue(ticket, "emotion", emotion);
+}
+
+string QuickReviewEmotionLabel(int emotion)
+{
+   if(emotion == 1)
+      return "calm";
+   if(emotion == 2)
+      return "patient";
+   if(emotion == 3)
+      return "anxious";
+   if(emotion == 4)
+      return "fomo";
+   if(emotion == 5)
+      return "revenge";
+
+   return "";
 }
 
 bool FirstSyncDone()
@@ -115,6 +179,59 @@ string BaseUrl()
       return StringSubstr(SyncUrl, 0, marker);
 
    return SyncUrl;
+}
+
+void LoadChecklistFromText(string text)
+{
+   string parts[];
+   g_quickReviewItemCount = 0;
+   StringReplace(text, "|", ";");
+
+   int count = StringSplit(text, ';', parts);
+
+   for(int index = 0; index < count && g_quickReviewItemCount < 8; index++)
+   {
+      string item = parts[index];
+      StringTrimLeft(item);
+      StringTrimRight(item);
+
+      if(item == "")
+         continue;
+
+      g_quickReviewItems[g_quickReviewItemCount] = item;
+      g_quickReviewItemCount++;
+   }
+}
+
+void LoadFallbackChecklist()
+{
+   LoadChecklistFromText(FallbackQuickReviewItems);
+}
+
+void FetchRuleChecklist()
+{
+   LoadFallbackChecklist();
+
+   if(!EnableQuickReview || QyvexApiKey == "" || SyncUrl == "")
+      return;
+
+   string requestUrl = BaseUrl() + "/api/mt5/rules?apiKey=" + UrlEncode(QyvexApiKey);
+   char postData[];
+   char result[];
+   string resultHeaders = "";
+   string headers = "";
+
+   ResetLastError();
+   int statusCode = WebRequest("GET", requestUrl, headers, 10000, postData, result, resultHeaders);
+   string response = CharArrayToString(result, 0, -1, CP_UTF8);
+
+   if(statusCode < 200 || statusCode >= 300)
+      return;
+
+   string checklistText = ExtractJsonString(response, "checklistText");
+
+   if(checklistText != "")
+      LoadChecklistFromText(checklistText);
 }
 
 string ExtractJsonString(string json, string key)
@@ -205,6 +322,31 @@ bool IsClosingEntry(long entryType)
    return entryType == DEAL_ENTRY_OUT || entryType == DEAL_ENTRY_INOUT || entryType == DEAL_ENTRY_OUT_BY;
 }
 
+string BuildQuickReviewJson(string ticket)
+{
+   string json = "{";
+   int emotion = GetQuickReviewEmotion(ticket);
+   json += "\"emotion\":" + JsonString(QuickReviewEmotionLabel(emotion)) + ",";
+   json += "\"confirmation\":" + (GetQuickReviewCheck(ticket, 0) ? "true" : "false") + ",";
+   json += "\"checklist\":[";
+
+   for(int index = 0; index < g_quickReviewItemCount; index++)
+   {
+      if(index > 0)
+         json += ",";
+
+      json += "{";
+      json += "\"id\":" + JsonString("ea-" + IntegerToString(index + 1)) + ",";
+      json += "\"label\":" + JsonString(g_quickReviewItems[index]) + ",";
+      json += "\"checked\":" + (GetQuickReviewCheck(ticket, index) ? "true" : "false");
+      json += "}";
+   }
+
+   json += "]";
+   json += "}";
+   return json;
+}
+
 string BuildTradeJson(
    string ticket,
    string symbol,
@@ -253,7 +395,8 @@ string BuildTradeJson(
    json += "\"contractSize\":" + JsonNumber(contractSize) + ",";
    json += "\"point\":" + JsonNumber(point) + ",";
    json += "\"digits\":" + IntegerToString((int)digits) + ",";
-   json += "\"status\":" + JsonString(status);
+   json += "\"status\":" + JsonString(status) + ",";
+   json += "\"quickReview\":" + BuildQuickReviewJson(ticket);
    json += "}";
    return json;
 }
@@ -664,6 +807,121 @@ bool SendTradeItems(string tradesJson, int tradesSent)
    return true;
 }
 
+string CurrentOpenReviewTicket()
+{
+   datetime newestTime = 0;
+   string newestTicket = "";
+   int total = PositionsTotal();
+
+   for(int index = 0; index < total; index++)
+   {
+      ulong ticket = PositionGetTicket(index);
+
+      if(ticket == 0 || !PositionSelectByTicket(ticket))
+         continue;
+
+      datetime openTime = (datetime)PositionGetInteger(POSITION_TIME);
+
+      if(openTime >= newestTime)
+      {
+         newestTime = openTime;
+         newestTicket = IntegerToString((long)ticket);
+      }
+   }
+
+   return newestTicket;
+}
+
+void DeleteQuickReviewObjects()
+{
+   int total = ObjectsTotal(0);
+
+   for(int index = total - 1; index >= 0; index--)
+   {
+      string name = ObjectName(0, index);
+
+      if(StringFind(name, "QYVEX_QR_") == 0)
+         ObjectDelete(0, name);
+   }
+}
+
+void CreateQuickReviewLabel(string name, string text, int x, int y, color textColor)
+{
+   ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, textColor);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
+   ObjectSetString(0, name, OBJPROP_FONT, "Arial");
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+}
+
+void CreateQuickReviewButton(string name, string text, int x, int y, int width, color backgroundColor)
+{
+   ObjectCreate(0, name, OBJ_BUTTON, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, width);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, 18);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, backgroundColor);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clrWhite);
+   ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, clrDimGray);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 7);
+   ObjectSetString(0, name, OBJPROP_FONT, "Arial");
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+}
+
+void RenderQuickReviewPanel()
+{
+   DeleteQuickReviewObjects();
+
+   if(!EnableQuickReview)
+      return;
+
+   string ticket = CurrentOpenReviewTicket();
+   g_quickReviewTicket = ticket;
+   int x = 12;
+   int y = 142;
+
+   CreateQuickReviewLabel("QYVEX_QR_TITLE", "Qyvex quick review", x, y, clrAqua);
+   y += 16;
+
+   if(ticket == "")
+   {
+      CreateQuickReviewLabel("QYVEX_QR_WAITING", "No open trade detected.", x, y, clrSilver);
+      ChartRedraw(0);
+      return;
+   }
+
+   CreateQuickReviewLabel("QYVEX_QR_TICKET", "Ticket: " + ticket, x, y, clrSilver);
+   y += 18;
+
+   int emotion = GetQuickReviewEmotion(ticket);
+   string emotionLabels[5] = {"Calm", "Patient", "Anxious", "FOMO", "Revenge"};
+
+   for(int index = 0; index < 5; index++)
+   {
+      color background = emotion == index + 1 ? clrMediumPurple : clrDarkSlateGray;
+      CreateQuickReviewButton("QYVEX_QR_EMOTION_" + IntegerToString(index + 1), emotionLabels[index], x + (index * 58), y, 54, background);
+   }
+
+   y += 24;
+
+   for(int itemIndex = 0; itemIndex < g_quickReviewItemCount; itemIndex++)
+   {
+      bool checked = GetQuickReviewCheck(ticket, itemIndex);
+      string text = (checked ? "[x] " : "[ ] ") + g_quickReviewItems[itemIndex];
+      color background = checked ? clrSeaGreen : clrDarkSlateGray;
+      CreateQuickReviewButton("QYVEX_QR_CHECK_" + IntegerToString(itemIndex), text, x, y, 292, background);
+      y += 22;
+   }
+
+   CreateQuickReviewLabel("QYVEX_QR_NOTE", "Selections sync automatically with the MT5 ticket.", x, y + 2, clrSilver);
+   ChartRedraw(0);
+}
+
 void SyncNow()
 {
    if(QyvexApiKey == "" || SyncUrl == "")
@@ -684,15 +942,18 @@ void SyncNow()
    SendTradeItems(tradesJson, tradesSent);
 
    UpdateChartStatus();
+   RenderQuickReviewPanel();
 }
 
 int OnInit()
 {
    int intervalSeconds = MathMax(1, SyncIntervalMinutes) * 60;
 
+   FetchRuleChecklist();
    EventSetTimer(intervalSeconds);
    g_lastStatus = "Initialized";
    UpdateChartStatus();
+   RenderQuickReviewPanel();
    SyncNow();
 
    return INIT_SUCCEEDED;
@@ -701,10 +962,41 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    EventKillTimer();
+   DeleteQuickReviewObjects();
    Comment("");
 }
 
 void OnTimer()
 {
+   FetchRuleChecklist();
    SyncNow();
+}
+
+void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
+{
+   if(id != CHARTEVENT_OBJECT_CLICK || !EnableQuickReview || g_quickReviewTicket == "")
+      return;
+
+   if(StringFind(sparam, "QYVEX_QR_EMOTION_") == 0)
+   {
+      string rawEmotion = StringSubstr(sparam, StringLen("QYVEX_QR_EMOTION_"));
+      int emotion = (int)StringToInteger(rawEmotion);
+      SetQuickReviewEmotion(g_quickReviewTicket, emotion);
+      RenderQuickReviewPanel();
+      SyncNow();
+      return;
+   }
+
+   if(StringFind(sparam, "QYVEX_QR_CHECK_") == 0)
+   {
+      string rawIndex = StringSubstr(sparam, StringLen("QYVEX_QR_CHECK_"));
+      int index = (int)StringToInteger(rawIndex);
+
+      if(index >= 0 && index < g_quickReviewItemCount)
+      {
+         ToggleQuickReviewCheck(g_quickReviewTicket, index);
+         RenderQuickReviewPanel();
+         SyncNow();
+      }
+   }
 }

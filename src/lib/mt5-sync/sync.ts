@@ -31,6 +31,12 @@ type TradeMutation = Database["public"]["Tables"]["trades"]["Insert"];
 type TradeUpdate = Database["public"]["Tables"]["trades"]["Update"];
 type AppSupabaseClient = SupabaseClient<Database>;
 
+type QuickReviewItem = {
+  checked?: unknown;
+  id?: unknown;
+  label?: unknown;
+};
+
 export function hashMt5ApiKey(apiKey: string) {
   return createHash("sha256").update(apiKey).digest("hex");
 }
@@ -259,6 +265,62 @@ function calculateFinalRr({
   return Number((result / risk).toFixed(2));
 }
 
+function booleanValue(value: unknown) {
+  return value === true || stringValue(value).toLowerCase() === "true" || stringValue(value) === "1";
+}
+
+function normalizeQuickReview(rawTrade: Mt5TradePayload, syncedAt: string) {
+  const rawReview = rawTrade.quickReview;
+
+  if (!rawReview || typeof rawReview !== "object" || Array.isArray(rawReview)) {
+    return null;
+  }
+
+  const review = rawReview as Record<string, unknown>;
+  const emotion = optionalString(review.emotion);
+  const confirmation = booleanValue(review.confirmation);
+  const rawChecklist = Array.isArray(review.checklist) ? review.checklist : [];
+  const checklistResults = rawChecklist
+    .map((item, index) => {
+      const rawItem =
+        typeof item === "object" && item !== null && !Array.isArray(item) ? (item as QuickReviewItem) : {};
+      const label = optionalString(rawItem.label);
+
+      if (!label) {
+        return null;
+      }
+
+      return {
+        id: optionalString(rawItem.id) ?? `ea-${index + 1}`,
+        label,
+        required: true,
+        status: booleanValue(rawItem.checked) ? ("passed" as const) : ("unchecked" as const),
+        type: "manual" as const,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+
+  const checkedCount = checklistResults.filter((item) => item.status === "passed").length;
+  const hasQuickReview = Boolean(emotion) || confirmation || checkedCount > 0;
+
+  if (!hasQuickReview) {
+    return null;
+  }
+
+  const completionRate = checklistResults.length ? Math.round((checkedCount / checklistResults.length) * 100) : 0;
+
+  return {
+    checklistCompletionRate: completionRate,
+    checklistResults,
+    confirmation,
+    disciplineScore: completionRate,
+    emotions: emotion ?? "unreviewed",
+    passedRules: checklistResults.filter((item) => item.status === "passed").map((item) => item.label),
+    reviewCompletedAt: syncedAt,
+    reviewStatus: "reviewed" as const,
+  };
+}
+
 function inferTradingSession(isoDate: string) {
   const hour = new Date(isoDate).getUTCHours();
 
@@ -359,6 +421,7 @@ function mapMt5Trade({
     rules,
     syncedAt,
   );
+  const quickReview = normalizeQuickReview(rawTrade, syncedAt);
 
   return {
     user_id: userId,
@@ -371,9 +434,9 @@ function mapMt5Trade({
     risk_percent: estimatedRisk.percent ?? 0,
     rr: plannedRr,
     session: inferTradingSession(tradeTakenAt),
-    emotions: "unreviewed",
+    emotions: quickReview?.emotions ?? "unreviewed",
     notes: optionalString(rawTrade.comment) ?? "Synced from MetaTrader 5. Complete the journal review.",
-    confirmation: false,
+    confirmation: quickReview?.confirmation ?? false,
     status,
     outcome: resolveOutcome(status, profit),
     trade_taken_at: tradeTakenAt,
@@ -397,13 +460,13 @@ function mapMt5Trade({
     risk_calculation_method: estimatedRisk.method,
     final_rr: finalRr,
     closing_notes: status === "closed" ? optionalString(rawTrade.closeComment) : null,
-    review_status: "needs_review",
-    review_completed_at: null,
-    checklist_results: [],
-    passed_rules: [],
+    review_status: quickReview?.reviewStatus ?? "needs_review",
+    review_completed_at: quickReview?.reviewCompletedAt ?? null,
+    checklist_results: quickReview?.checklistResults ?? [],
+    passed_rules: quickReview?.passedRules ?? [],
     failed_rules: [],
-    checklist_completion_rate: 0,
-    discipline_score: 0,
+    checklist_completion_rate: quickReview?.checklistCompletionRate ?? 0,
+    discipline_score: quickReview?.disciplineScore ?? 0,
     mt5_ticket: mt5Ticket,
     mt5_account: accountNumber,
     mt5_broker: broker,
@@ -479,6 +542,20 @@ function getReviewPreservingUpdate(
     Number(existingTrade.checklist_completion_rate ?? 0) > 0
   ) {
     return {
+      review_status: "reviewed" as const,
+    };
+  }
+
+  if (tradeInput.review_status === "reviewed") {
+    return {
+      checklist_completion_rate: tradeInput.checklist_completion_rate,
+      checklist_results: tradeInput.checklist_results,
+      confirmation: tradeInput.confirmation,
+      discipline_score: tradeInput.discipline_score,
+      emotions: tradeInput.emotions,
+      failed_rules: tradeInput.failed_rules,
+      passed_rules: tradeInput.passed_rules,
+      review_completed_at: tradeInput.review_completed_at,
       review_status: "reviewed" as const,
     };
   }
