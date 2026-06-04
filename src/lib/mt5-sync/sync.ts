@@ -278,6 +278,7 @@ function normalizeQuickReview(rawTrade: Mt5TradePayload, syncedAt: string) {
 
   const review = rawReview as Record<string, unknown>;
   const emotion = optionalString(review.emotion);
+  const notes = optionalString(review.notes);
   const confirmation = booleanValue(review.confirmation);
   const rawChecklist = Array.isArray(review.checklist) ? review.checklist : [];
   const checklistResults = rawChecklist
@@ -301,7 +302,7 @@ function normalizeQuickReview(rawTrade: Mt5TradePayload, syncedAt: string) {
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
   const checkedCount = checklistResults.filter((item) => item.status === "passed").length;
-  const hasQuickReview = Boolean(emotion) || confirmation || checkedCount > 0;
+  const hasQuickReview = Boolean(emotion) || Boolean(notes) || confirmation || checkedCount > 0;
 
   if (!hasQuickReview) {
     return null;
@@ -315,6 +316,7 @@ function normalizeQuickReview(rawTrade: Mt5TradePayload, syncedAt: string) {
     confirmation,
     disciplineScore: completionRate,
     emotions: emotion ?? "unreviewed",
+    notes,
     passedRules: checklistResults.filter((item) => item.status === "passed").map((item) => item.label),
     reviewCompletedAt: syncedAt,
     reviewStatus: "reviewed" as const,
@@ -435,7 +437,10 @@ function mapMt5Trade({
     rr: plannedRr,
     session: inferTradingSession(tradeTakenAt),
     emotions: quickReview?.emotions ?? "unreviewed",
-    notes: optionalString(rawTrade.comment) ?? "Synced from MetaTrader 5. Complete the journal review.",
+    notes:
+      quickReview?.notes ??
+      optionalString(rawTrade.comment) ??
+      "Synced from MetaTrader 5. Complete the journal review.",
     confirmation: quickReview?.confirmation ?? false,
     status,
     outcome: resolveOutcome(status, profit),
@@ -554,6 +559,7 @@ function getReviewPreservingUpdate(
       discipline_score: tradeInput.discipline_score,
       emotions: tradeInput.emotions,
       failed_rules: tradeInput.failed_rules,
+      notes: tradeInput.notes,
       passed_rules: tradeInput.passed_rules,
       review_completed_at: tradeInput.review_completed_at,
       review_status: "reviewed" as const,
