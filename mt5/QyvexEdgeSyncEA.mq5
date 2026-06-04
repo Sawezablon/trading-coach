@@ -4,7 +4,7 @@
 //| This EA does not place, modify, or close trades.                  |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "1.07"
+#property version   "1.08"
 #property description "Read-only Qyvex Edge trade sync EA."
 
 input string QyvexApiKey = "";
@@ -31,6 +31,9 @@ string g_reviewQueueTickets[20];
 string g_reviewQueueLabels[20];
 int g_reviewQueueCount = 0;
 int g_reviewQueueIndex = 0;
+int g_panelX = 0;
+int g_panelY = 0;
+string g_reviewDraftStatus = "Draft";
 
 string StateKeyPrefix()
 {
@@ -45,6 +48,36 @@ string FirstSyncKey()
 string LastSuccessfulSyncKey()
 {
    return StateKeyPrefix() + "LastSuccessfulSync";
+}
+
+string PanelXKey()
+{
+   return StateKeyPrefix() + "QuickReviewPanelX";
+}
+
+string PanelYKey()
+{
+   return StateKeyPrefix() + "QuickReviewPanelY";
+}
+
+void LoadPanelPosition()
+{
+   g_panelX = QuickReviewPanelX;
+   g_panelY = QuickReviewPanelY;
+
+   if(GlobalVariableCheck(PanelXKey()))
+      g_panelX = (int)GlobalVariableGet(PanelXKey());
+
+   if(GlobalVariableCheck(PanelYKey()))
+      g_panelY = (int)GlobalVariableGet(PanelYKey());
+}
+
+void SavePanelPosition(int x, int y)
+{
+   g_panelX = MathMax(0, x);
+   g_panelY = MathMax(0, y);
+   GlobalVariableSet(PanelXKey(), g_panelX);
+   GlobalVariableSet(PanelYKey(), g_panelY);
 }
 
 string QuickReviewKey(string ticket, string key)
@@ -88,6 +121,22 @@ int GetQuickReviewEmotion(string ticket)
 void SetQuickReviewEmotion(string ticket, int emotion)
 {
    SetQuickReviewValue(ticket, "emotion", emotion);
+}
+
+bool QuickReviewSubmitted(string ticket)
+{
+   return GetQuickReviewValue(ticket, "submitted") > 0;
+}
+
+void SetQuickReviewSubmitted(string ticket, bool submitted)
+{
+   SetQuickReviewValue(ticket, "submitted", submitted ? 1 : 0);
+}
+
+void MarkQuickReviewDraft(string ticket)
+{
+   SetQuickReviewSubmitted(ticket, false);
+   g_reviewDraftStatus = "Draft saved locally";
 }
 
 string QuickReviewEmotionLabel(int emotion)
@@ -330,6 +379,9 @@ bool IsClosingEntry(long entryType)
 
 string BuildQuickReviewJson(string ticket)
 {
+   if(!QuickReviewSubmitted(ticket))
+      return "{}";
+
    string json = "{";
    int emotion = GetQuickReviewEmotion(ticket);
    json += "\"emotion\":" + JsonString(QuickReviewEmotionLabel(emotion)) + ",";
@@ -355,6 +407,9 @@ string BuildQuickReviewJson(string ticket)
 
 bool HasQuickReviewData(string ticket)
 {
+   if(!QuickReviewSubmitted(ticket))
+      return false;
+
    if(GetQuickReviewEmotion(ticket) > 0)
       return true;
 
@@ -1000,6 +1055,26 @@ void CreateQuickReviewLabel(string name, string text, int x, int y, color textCo
    ObjectSetString(0, name, OBJPROP_TEXT, text);
 }
 
+void CreateQuickReviewDragLabel(string name, string text, int x, int y, int width)
+{
+   ObjectCreate(0, name, OBJ_BUTTON, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, width);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, 22);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, clrMidnightBlue);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clrWhite);
+   ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, clrMediumPurple);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
+   ObjectSetInteger(0, name, OBJPROP_BACK, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, true);
+   ObjectSetInteger(0, name, OBJPROP_ZORDER, 1200);
+   ObjectSetString(0, name, OBJPROP_FONT, "Arial");
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+}
+
 void CreateQuickReviewBackground(int x, int y, int width, int height)
 {
    string name = "QYVEX_QR_BACKGROUND";
@@ -1013,7 +1088,7 @@ void CreateQuickReviewBackground(int x, int y, int width, int height)
    ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, clrMediumPurple);
    ObjectSetInteger(0, name, OBJPROP_BACK, false);
    ObjectSetInteger(0, name, OBJPROP_HIDDEN, false);
-   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, true);
    ObjectSetInteger(0, name, OBJPROP_ZORDER, 900);
 }
 
@@ -1046,17 +1121,17 @@ void RenderQuickReviewPanel()
 
    BuildReviewQueue();
    string ticket = g_quickReviewTicket;
-   int x = QuickReviewPanelX;
-   int y = QuickReviewPanelY;
+   int x = g_panelX;
+   int y = g_panelY;
 
-   CreateQuickReviewBackground(x, y, 322, 260);
+   CreateQuickReviewBackground(x, y, 342, 320);
 
-   CreateQuickReviewLabel("QYVEX_QR_TITLE", "Qyvex daily review queue", x, y, clrAqua);
-   y += 16;
+   CreateQuickReviewDragLabel("QYVEX_QR_DRAG", "Qyvex Edge Review  |  drag this bar", x, y, 326);
+   y += 30;
 
    if(ticket == "")
    {
-      CreateQuickReviewLabel("QYVEX_QR_WAITING", "No open or closed trades found today.", x, y, clrSilver);
+      CreateQuickReviewLabel("QYVEX_QR_WAITING", "No open or closed trades found today.", x + 10, y, clrSilver);
       ChartRedraw(0);
       return;
    }
@@ -1065,17 +1140,20 @@ void RenderQuickReviewPanel()
       "QYVEX_QR_TICKET",
       "Review " + IntegerToString(g_reviewQueueIndex + 1) + "/" + IntegerToString(g_reviewQueueCount) +
          " | Ticket: " + ticket,
-      x,
+      x + 10,
       y,
       clrSilver
    );
    y += 16;
-   CreateQuickReviewLabel("QYVEX_QR_LABEL", CurrentReviewLabel(), x, y, clrWhite);
-   y += 20;
-
-   CreateQuickReviewButton("QYVEX_QR_PREV", "< Previous", x, y, 88, clrDarkSlateGray);
-   CreateQuickReviewButton("QYVEX_QR_NEXT", "Next >", x + 96, y, 88, clrDarkSlateGray);
+   CreateQuickReviewLabel("QYVEX_QR_LABEL", CurrentReviewLabel(), x + 10, y, clrWhite);
    y += 24;
+
+   CreateQuickReviewButton("QYVEX_QR_PREV", "< Previous", x + 10, y, 96, clrDarkSlateGray);
+   CreateQuickReviewButton("QYVEX_QR_NEXT", "Next >", x + 114, y, 96, clrDarkSlateGray);
+   y += 30;
+
+   CreateQuickReviewLabel("QYVEX_QR_EMOTION_LABEL", "Emotion before trade", x + 10, y, clrSilver);
+   y += 16;
 
    int emotion = GetQuickReviewEmotion(ticket);
    string emotionLabels[5] = {"Calm", "Patient", "Anxious", "FOMO", "Revenge"};
@@ -1083,21 +1161,26 @@ void RenderQuickReviewPanel()
    for(int index = 0; index < 5; index++)
    {
       color background = emotion == index + 1 ? clrMediumPurple : clrDarkSlateGray;
-      CreateQuickReviewButton("QYVEX_QR_EMOTION_" + IntegerToString(index + 1), emotionLabels[index], x + (index * 58), y, 54, background);
+      CreateQuickReviewButton("QYVEX_QR_EMOTION_" + IntegerToString(index + 1), emotionLabels[index], x + 10 + (index * 64), y, 60, background);
    }
 
-   y += 24;
+   y += 30;
+   CreateQuickReviewLabel("QYVEX_QR_CHECKLIST_LABEL", "Checklist", x + 10, y, clrSilver);
+   y += 16;
 
    for(int itemIndex = 0; itemIndex < g_quickReviewItemCount; itemIndex++)
    {
       bool checked = GetQuickReviewCheck(ticket, itemIndex);
       string text = (checked ? "[x] " : "[ ] ") + g_quickReviewItems[itemIndex];
       color background = checked ? clrSeaGreen : clrDarkSlateGray;
-      CreateQuickReviewButton("QYVEX_QR_CHECK_" + IntegerToString(itemIndex), text, x, y, 292, background);
+      CreateQuickReviewButton("QYVEX_QR_CHECK_" + IntegerToString(itemIndex), text, x + 10, y, 306, background);
       y += 22;
    }
 
-   CreateQuickReviewLabel("QYVEX_QR_NOTE", "Selections sync automatically with the MT5 ticket.", x, y + 2, clrSilver);
+   y += 6;
+   CreateQuickReviewButton("QYVEX_QR_SUBMIT", "Submit Review", x + 10, y, 140, clrSeaGreen);
+   string statusText = QuickReviewSubmitted(ticket) ? "Submitted. Waiting for next Qyvex sync." : g_reviewDraftStatus;
+   CreateQuickReviewLabel("QYVEX_QR_NOTE", statusText, x + 160, y + 4, QuickReviewSubmitted(ticket) ? clrLime : clrSilver);
    ChartRedraw(0);
 }
 
@@ -1129,6 +1212,7 @@ int OnInit()
 {
    int intervalSeconds = MathMax(1, SyncIntervalMinutes) * 60;
 
+   LoadPanelPosition();
    FetchRuleChecklist();
    EventSetTimer(intervalSeconds);
    g_lastStatus = "Initialized";
@@ -1154,7 +1238,26 @@ void OnTimer()
 
 void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
 {
-   if(id != CHARTEVENT_OBJECT_CLICK || !EnableQuickReview || g_quickReviewTicket == "")
+   if(!EnableQuickReview)
+      return;
+
+   if(id == CHARTEVENT_OBJECT_DRAG && (sparam == "QYVEX_QR_BACKGROUND" || sparam == "QYVEX_QR_DRAG"))
+   {
+      int x = (int)ObjectGetInteger(0, sparam, OBJPROP_XDISTANCE);
+      int y = (int)ObjectGetInteger(0, sparam, OBJPROP_YDISTANCE);
+
+      if(sparam == "QYVEX_QR_BACKGROUND")
+      {
+         x += 8;
+         y += 8;
+      }
+
+      SavePanelPosition(x, y);
+      RenderQuickReviewPanel();
+      return;
+   }
+
+   if(id != CHARTEVENT_OBJECT_CLICK || g_quickReviewTicket == "")
       return;
 
    if(sparam == "QYVEX_QR_PREV")
@@ -1171,13 +1274,22 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       return;
    }
 
+   if(sparam == "QYVEX_QR_SUBMIT")
+   {
+      SetQuickReviewSubmitted(g_quickReviewTicket, true);
+      g_reviewDraftStatus = "Submitted. Syncing...";
+      RenderQuickReviewPanel();
+      SyncNow();
+      return;
+   }
+
    if(StringFind(sparam, "QYVEX_QR_EMOTION_") == 0)
    {
       string rawEmotion = StringSubstr(sparam, StringLen("QYVEX_QR_EMOTION_"));
       int emotion = (int)StringToInteger(rawEmotion);
       SetQuickReviewEmotion(g_quickReviewTicket, emotion);
+      MarkQuickReviewDraft(g_quickReviewTicket);
       RenderQuickReviewPanel();
-      SyncNow();
       return;
    }
 
@@ -1189,8 +1301,8 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       if(index >= 0 && index < g_quickReviewItemCount)
       {
          ToggleQuickReviewCheck(g_quickReviewTicket, index);
+         MarkQuickReviewDraft(g_quickReviewTicket);
          RenderQuickReviewPanel();
-         SyncNow();
       }
    }
 }
