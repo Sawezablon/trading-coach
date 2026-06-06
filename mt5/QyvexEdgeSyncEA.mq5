@@ -107,14 +107,33 @@ void SetQuickReviewValue(string ticket, string key, double value)
    GlobalVariableSet(QuickReviewKey(ticket, key), value);
 }
 
-bool GetQuickReviewCheck(string ticket, int index)
+int GetQuickReviewCheckState(string ticket, int index)
 {
-   return GetQuickReviewValue(ticket, "check_" + IntegerToString(index)) > 0;
+   return (int)GetQuickReviewValue(ticket, "check_" + IntegerToString(index));
 }
 
-void ToggleQuickReviewCheck(string ticket, int index)
+string QuickReviewCheckStatus(string ticket, int index)
 {
-   SetQuickReviewValue(ticket, "check_" + IntegerToString(index), GetQuickReviewCheck(ticket, index) ? 0 : 1);
+   int state = GetQuickReviewCheckState(ticket, index);
+
+   if(state == 1)
+      return "passed";
+
+   if(state == 2)
+      return "failed";
+
+   return "unchecked";
+}
+
+void CycleQuickReviewCheck(string ticket, int index)
+{
+   int state = GetQuickReviewCheckState(ticket, index);
+   int nextState = state + 1;
+
+   if(nextState > 2)
+      nextState = 0;
+
+   SetQuickReviewValue(ticket, "check_" + IntegerToString(index), nextState);
 }
 
 int GetQuickReviewEmotion(string ticket)
@@ -423,7 +442,7 @@ string BuildQuickReviewJson(string ticket)
    int emotion = GetQuickReviewEmotion(ticket);
    json += "\"emotion\":" + JsonString(QuickReviewEmotionLabel(emotion)) + ",";
    json += "\"notes\":" + JsonString(GetQuickReviewNotes(ticket)) + ",";
-   json += "\"confirmation\":" + (GetQuickReviewCheck(ticket, 0) ? "true" : "false") + ",";
+   json += "\"confirmation\":" + (GetQuickReviewCheckState(ticket, 0) == 1 ? "true" : "false") + ",";
    json += "\"checklist\":[";
 
    for(int index = 0; index < g_quickReviewItemCount; index++)
@@ -434,7 +453,8 @@ string BuildQuickReviewJson(string ticket)
       json += "{";
       json += "\"id\":" + JsonString("ea-" + IntegerToString(index + 1)) + ",";
       json += "\"label\":" + JsonString(g_quickReviewItems[index]) + ",";
-      json += "\"checked\":" + (GetQuickReviewCheck(ticket, index) ? "true" : "false");
+      json += "\"status\":" + JsonString(QuickReviewCheckStatus(ticket, index)) + ",";
+      json += "\"checked\":" + (GetQuickReviewCheckState(ticket, index) == 1 ? "true" : "false");
       json += "}";
    }
 
@@ -456,7 +476,7 @@ bool HasQuickReviewData(string ticket)
 
    for(int index = 0; index < g_quickReviewItemCount; index++)
    {
-      if(GetQuickReviewCheck(ticket, index))
+      if(GetQuickReviewCheckState(ticket, index) > 0)
          return true;
    }
 
@@ -1265,9 +1285,22 @@ void RenderQuickReviewPanel()
 
    for(int itemIndex = startItem; itemIndex < endItem; itemIndex++)
    {
-      bool checked = GetQuickReviewCheck(ticket, itemIndex);
-      string text = (checked ? "[x] " : "[ ] ") + g_quickReviewItems[itemIndex];
-      color background = checked ? clrSeaGreen : clrDarkSlateGray;
+      int checkState = GetQuickReviewCheckState(ticket, itemIndex);
+      string prefix = "[ ] ";
+      color background = clrDarkSlateGray;
+
+      if(checkState == 1)
+      {
+         prefix = "[OK] ";
+         background = clrSeaGreen;
+      }
+      else if(checkState == 2)
+      {
+         prefix = "[X] ";
+         background = clrFireBrick;
+      }
+
+      string text = prefix + g_quickReviewItems[itemIndex];
       CreateQuickReviewButton("QYVEX_QR_CHECK_" + IntegerToString(itemIndex), text, x + 10, y, 318, background);
       y += 22;
    }
@@ -1441,7 +1474,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
 
       if(index >= 0 && index < g_quickReviewItemCount)
       {
-         ToggleQuickReviewCheck(g_quickReviewTicket, index);
+         CycleQuickReviewCheck(g_quickReviewTicket, index);
          MarkQuickReviewDraft(g_quickReviewTicket);
          RenderQuickReviewPanel();
       }

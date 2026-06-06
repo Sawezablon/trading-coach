@@ -19,7 +19,6 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -50,6 +49,9 @@ type TradeFormProps = {
   initialTrade?: Trade;
 };
 
+type ManualRuleState = ChecklistItemResult["status"];
+type ManualRuleStates = Record<string, ManualRuleState>;
+
 function toDatetimeLocalValue(date: Date) {
   const offsetMs = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
@@ -65,16 +67,29 @@ function sameLocalDate(a: string, b: string) {
   return left.toDateString() === right.toDateString();
 }
 
-function manualIdsFromTrade(trade: Trade | undefined) {
-  const ids = (trade?.checklist_results ?? [])
-    .filter((item) => item.type === "manual" && item.status === "passed")
-    .map((item) => item.id);
+function manualStatesFromTrade(trade: Trade | undefined): ManualRuleStates {
+  const states = Object.fromEntries(
+    (trade?.checklist_results ?? []).filter((item) => item.type === "manual").map((item) => [item.id, item.status]),
+  ) as ManualRuleStates;
 
-  if (trade?.confirmation && !ids.includes("confirmation")) {
-    ids.push("confirmation");
+  if (trade?.confirmation && !states.confirmation) {
+    states.confirmation = "passed";
   }
 
-  return ids;
+  return states;
+}
+
+function manualIdsFromStates(states: ManualRuleStates) {
+  return Object.entries(states)
+    .filter(([, status]) => status === "passed")
+    .map(([id]) => id);
+}
+
+function serializeManualRuleStates(states: ManualRuleStates) {
+  return Object.entries(states)
+    .filter(([, status]) => status === "passed" || status === "failed")
+    .map(([id, status]) => `${id}:${status}`)
+    .join(",");
 }
 
 function optionalDateTimeValue(value: string | null | undefined) {
@@ -134,7 +149,8 @@ export function TradeUploadForm({
   const [status, setStatus] = useState<TradeStatus>(initialTrade?.status ?? "open");
   const [outcome, setOutcome] = useState<TradeResult>(initialTrade?.outcome ?? "pending");
   const [closedAt, setClosedAt] = useState(() => optionalDateTimeValue(initialTrade?.closed_at));
-  const [manualRuleIds, setManualRuleIds] = useState<string[]>(() => manualIdsFromTrade(initialTrade));
+  const [manualRuleStates, setManualRuleStates] = useState<ManualRuleStates>(() => manualStatesFromTrade(initialTrade));
+  const manualRuleIds = manualIdsFromStates(manualRuleStates);
   const tradeTimezone = initialTrade?.trade_timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
   const tradesToday = tradeTimestamps.filter((timestamp) => sameLocalDate(timestamp, tradeTakenAt)).length;
   const emotions = selectedEmotions.join(",");
@@ -155,6 +171,7 @@ export function TradeUploadForm({
       trade_taken_at: tradeTakenAtIso,
       tradesToday,
       manualRuleIds,
+      manualRuleStates,
     },
     rules,
   );
@@ -208,6 +225,7 @@ export function TradeUploadForm({
     formData.set("status", status);
     formData.set("outcome", status === "open" ? "pending" : outcome);
     formData.set("manual_rule_ids", manualRuleIds.join(","));
+    formData.set("manual_rule_states", serializeManualRuleStates(manualRuleStates));
     formData.set("confirmation", manualRuleIds.includes("confirmation") || confirmation ? "true" : "false");
     formData.set("mt5_connection_id", mt5ConnectionId);
     if (file) {
@@ -598,8 +616,8 @@ export function TradeUploadForm({
               description="Your personal confirmations."
               items={userItems}
               completionRate={userCompletion}
-              manualRuleIds={manualRuleIds}
-              onManualRuleChange={setManualRuleIds}
+              manualRuleStates={manualRuleStates}
+              onManualRuleStateChange={setManualRuleStates}
               title="User Checklist"
             >
               <EmotionChecklistField selectedEmotions={selectedEmotions} setSelectedEmotions={setSelectedEmotions} />
@@ -625,19 +643,20 @@ function ChecklistSection({
   completionRate,
   description,
   items,
-  manualRuleIds = [],
-  onManualRuleChange,
+  manualRuleStates = {},
+  onManualRuleStateChange,
   title,
 }: {
   children?: ReactNode;
   completionRate: number;
   description: string;
   items: ChecklistItemResult[];
-  manualRuleIds?: string[];
-  onManualRuleChange?: (update: (current: string[]) => string[]) => void;
+  manualRuleStates?: ManualRuleStates;
+  onManualRuleStateChange?: (update: (current: ManualRuleStates) => ManualRuleStates) => void;
   title: string;
 }) {
   const passedCount = items.filter((rule) => rule.status === "passed").length;
+  const failedCount = items.filter((rule) => rule.status === "failed").length;
 
   return (
     <section className="space-y-3">
@@ -647,7 +666,7 @@ function ChecklistSection({
           <div className="text-muted-foreground text-xs">{description}</div>
         </div>
         <Badge variant="outline" className="shrink-0 rounded-full">
-          {passedCount}/{items.length}
+          {passedCount} OK / {failedCount} X
         </Badge>
       </div>
 
@@ -658,8 +677,8 @@ function ChecklistSection({
           items.map((rule) => (
             <ChecklistRuleRow
               key={rule.id}
-              manualRuleIds={manualRuleIds}
-              onManualRuleChange={onManualRuleChange}
+              manualRuleStates={manualRuleStates}
+              onManualRuleStateChange={onManualRuleStateChange}
               rule={rule}
             />
           ))
@@ -722,25 +741,46 @@ function EmotionChecklistField({
 }
 
 function ChecklistRuleRow({
-  manualRuleIds,
-  onManualRuleChange,
+  manualRuleStates,
+  onManualRuleStateChange,
   rule,
 }: {
-  manualRuleIds: string[];
-  onManualRuleChange?: (update: (current: string[]) => string[]) => void;
+  manualRuleStates: ManualRuleStates;
+  onManualRuleStateChange?: (update: (current: ManualRuleStates) => ManualRuleStates) => void;
   rule: ChecklistItemResult;
 }) {
+  const manualStatus = manualRuleStates[rule.id] ?? rule.status;
+  const setManualStatus = (status: ManualRuleState) => {
+    onManualRuleStateChange?.((current) => {
+      const next = { ...current };
+      next[rule.id] = current[rule.id] === status ? "unchecked" : status;
+      return next;
+    });
+  };
+
   return (
     <div className={getRuleCardClass(rule.status)}>
       {rule.type === "manual" && rule.id !== "emotion-state" ? (
-        <Checkbox
-          checked={manualRuleIds.includes(rule.id)}
-          onCheckedChange={(checked) => {
-            onManualRuleChange?.((current) =>
-              checked ? [...current, rule.id] : current.filter((id) => id !== rule.id),
-            );
-          }}
-        />
+        <div className="flex shrink-0 gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant={manualStatus === "passed" ? "default" : "outline"}
+            className="size-7 rounded-full p-0 text-xs"
+            onClick={() => setManualStatus("passed")}
+          >
+            ✓
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={manualStatus === "failed" ? "destructive" : "outline"}
+            className="size-7 rounded-full p-0 text-xs"
+            onClick={() => setManualStatus("failed")}
+          >
+            X
+          </Button>
+        </div>
       ) : (
         <span className={getRuleIconClass(rule.status)}>{rule.status === "passed" ? "OK" : "!"}</span>
       )}

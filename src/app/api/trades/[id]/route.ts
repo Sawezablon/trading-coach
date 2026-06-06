@@ -27,8 +27,29 @@ async function uploadScreenshot(userId: string, file: File | null) {
   return data.publicUrl;
 }
 
-function manualIdsFromChecklist(items: ChecklistItemResult[] | null | undefined) {
-  return (items ?? []).filter((item) => item.type === "manual" && item.status === "passed").map((item) => item.id);
+function manualStatesFromChecklist(items: ChecklistItemResult[] | null | undefined) {
+  return Object.fromEntries(
+    (items ?? []).filter((item) => item.type === "manual").map((item) => [item.id, item.status]),
+  );
+}
+
+function parseManualRuleStates(formData: FormData) {
+  const states: Record<string, ChecklistItemResult["status"]> = {};
+
+  for (const entry of String(formData.get("manual_rule_states") ?? "").split(",")) {
+    const [id, status] = entry
+      .trim()
+      .split(":")
+      .map((part) => part.trim());
+
+    if (!id) {
+      continue;
+    }
+
+    states[id] = status === "failed" ? "failed" : status === "passed" ? "passed" : "unchecked";
+  }
+
+  return states;
 }
 
 function sameNumber(left: number | null, right: number | null) {
@@ -65,9 +86,16 @@ async function getSelectedConnection(
   return data;
 }
 
-function entryFieldsChanged(existing: Trade, next: ParsedTradeForm, manualRuleIds: string[]) {
-  const existingManualIds = manualIdsFromChecklist(existing.checklist_results).sort().join(",");
-  const nextManualIds = [...manualRuleIds].sort().join(",");
+function entryFieldsChanged(
+  existing: Trade,
+  next: ParsedTradeForm,
+  manualRuleIds: string[],
+  manualRuleStates: Record<string, string>,
+) {
+  const existingManualStates = JSON.stringify(manualStatesFromChecklist(existing.checklist_results));
+  const nextManualStates = Object.keys(manualRuleStates).length
+    ? JSON.stringify(manualRuleStates)
+    : JSON.stringify(Object.fromEntries(manualRuleIds.map((id) => [id, "passed"])));
 
   return (
     existing.pair !== next.pair ||
@@ -82,7 +110,7 @@ function entryFieldsChanged(existing: Trade, next: ParsedTradeForm, manualRuleId
     existing.notes !== next.notes ||
     existing.confirmation !== next.confirmation ||
     existing.trade_taken_at !== next.trade_taken_at ||
-    existingManualIds !== nextManualIds
+    existingManualStates !== nextManualStates
   );
 }
 
@@ -135,11 +163,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .split(",")
     .map((ruleId) => ruleId.trim())
     .filter(Boolean);
+  const manualRuleStates = parseManualRuleStates(formData);
   const screenshotEntry = formData.get("screenshot");
   const screenshot = screenshotEntry instanceof File ? screenshotEntry : null;
   const screenshotUrl = (await uploadScreenshot(user.id, screenshot)) ?? existingTrade.screenshot_url;
   const shouldRerunRules =
-    entryFieldsChanged(existingTrade as Trade, parsed.data, manualRuleIds) || Boolean(screenshot);
+    entryFieldsChanged(existingTrade as Trade, parsed.data, manualRuleIds, manualRuleStates) || Boolean(screenshot);
   const { data: rulesData, error: rulesLoadError } = await supabase
     .from("trading_rules")
     .select("*")
@@ -190,6 +219,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         hasScreenshot: Boolean(screenshotUrl),
         tradesToday: tradesToday ?? 0,
         manualRuleIds,
+        manualRuleStates,
       },
       rules,
     );

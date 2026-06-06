@@ -291,18 +291,27 @@ function normalizeQuickReview(rawTrade: Mt5TradePayload, syncedAt: string) {
         return null;
       }
 
+      const status = optionalString((rawItem as Record<string, unknown>).status);
+      const normalizedStatus =
+        status === "failed"
+          ? ("failed" as const)
+          : status === "passed" || booleanValue(rawItem.checked)
+            ? ("passed" as const)
+            : ("unchecked" as const);
+
       return {
         id: optionalString(rawItem.id) ?? `ea-${index + 1}`,
         label,
         required: true,
-        status: booleanValue(rawItem.checked) ? ("passed" as const) : ("unchecked" as const),
+        status: normalizedStatus,
         type: "manual" as const,
       };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
   const checkedCount = checklistResults.filter((item) => item.status === "passed").length;
-  const hasQuickReview = Boolean(emotion) || Boolean(notes) || confirmation || checkedCount > 0;
+  const failedCount = checklistResults.filter((item) => item.status === "failed").length;
+  const hasQuickReview = Boolean(emotion) || Boolean(notes) || confirmation || checkedCount > 0 || failedCount > 0;
 
   if (!hasQuickReview) {
     return null;
@@ -316,6 +325,7 @@ function normalizeQuickReview(rawTrade: Mt5TradePayload, syncedAt: string) {
     confirmation,
     disciplineScore: completionRate,
     emotions: emotion ?? "unreviewed",
+    failedRules: checklistResults.filter((item) => item.status === "failed").map((item) => item.label),
     notes,
     passedRules: checklistResults.filter((item) => item.status === "passed").map((item) => item.label),
     reviewCompletedAt: syncedAt,
@@ -469,7 +479,7 @@ function mapMt5Trade({
     review_completed_at: quickReview?.reviewCompletedAt ?? null,
     checklist_results: quickReview?.checklistResults ?? [],
     passed_rules: quickReview?.passedRules ?? [],
-    failed_rules: [],
+    failed_rules: quickReview?.failedRules ?? [],
     checklist_completion_rate: quickReview?.checklistCompletionRate ?? 0,
     discipline_score: quickReview?.disciplineScore ?? 0,
     mt5_ticket: mt5Ticket,

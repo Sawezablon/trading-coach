@@ -12,6 +12,7 @@ export type TradeRuleInput = {
   trade_taken_at: string;
   tradesToday?: number;
   manualRuleIds?: string[];
+  manualRuleStates?: Record<string, ChecklistItemResult["status"]>;
 };
 
 export type ChecklistEvaluation = {
@@ -48,6 +49,11 @@ export function evaluateTradeChecklist(trade: TradeRuleInput, rules: RuleSetting
   const allowedSessions = rules.allowed_sessions.map(normalize).filter(Boolean);
   const allowedDirections = rules.allowed_directions.map(normalize).filter(Boolean);
   const manualRuleIds = new Set(trade.manualRuleIds ?? []);
+  const manualRuleStates = trade.manualRuleStates ?? {};
+
+  function manualStatus(id: string) {
+    return manualRuleStates[id] ?? (manualRuleIds.has(id) ? "passed" : "unchecked");
+  }
 
   const items: ChecklistItemResult[] = [];
 
@@ -110,7 +116,7 @@ export function evaluateTradeChecklist(trade: TradeRuleInput, rules: RuleSetting
       id: "confirmation",
       label: "Confirmation candle closed",
       required: true,
-      status: manualRuleIds.has("confirmation") ? "passed" : "unchecked",
+      status: manualStatus("confirmation"),
       type: "manual",
     });
   }
@@ -124,15 +130,13 @@ export function evaluateTradeChecklist(trade: TradeRuleInput, rules: RuleSetting
       label,
       required: true,
       type: "manual",
-      status: manualRuleIds.has(id) ? "passed" : "unchecked",
+      status: manualStatus(id),
     });
   }
 
   const passedRules = items.filter((rule) => rule.status === "passed").map((rule) => rule.label);
-  const failedRules = items
-    .filter((rule) => rule.status === "failed" || (rule.required && rule.status === "unchecked"))
-    .map((rule) => rule.label);
-  const requiredFailures = items.filter((rule) => rule.required && rule.status !== "passed");
+  const failedRules = items.filter((rule) => rule.status === "failed").map((rule) => rule.label);
+  const requiredFailures = items.filter((rule) => rule.required && rule.status === "failed");
   const completionRate = items.length ? Math.round((passedRules.length / items.length) * 100) : 100;
   const disciplineScore = Math.max(0, Math.min(100, completionRate - requiredFailures.length * 5));
 

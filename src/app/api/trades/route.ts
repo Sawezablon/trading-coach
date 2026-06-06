@@ -3,10 +3,29 @@ import { NextResponse } from "next/server";
 import { analyzeTrade } from "@/lib/ai/analyze-trade";
 import { demoRules } from "@/lib/mock-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { RuleSettings } from "@/lib/supabase/types";
+import type { ChecklistItemResult, RuleSettings } from "@/lib/supabase/types";
 import { evaluateSystemTradeReview } from "@/lib/system-review";
 import { asIsoDateTime, parseTradeFormData } from "@/lib/trade-form";
 import { evaluateTradeChecklist } from "@/lib/trade-rules";
+
+function parseManualRuleStates(formData: FormData) {
+  const states: Record<string, ChecklistItemResult["status"]> = {};
+
+  for (const entry of String(formData.get("manual_rule_states") ?? "").split(",")) {
+    const [id, status] = entry
+      .trim()
+      .split(":")
+      .map((part) => part.trim());
+
+    if (!id) {
+      continue;
+    }
+
+    states[id] = status === "failed" ? "failed" : status === "passed" ? "passed" : "unchecked";
+  }
+
+  return states;
+}
 
 async function fileToDataUrl(file: File | null) {
   if (!file || file.size === 0) {
@@ -65,6 +84,7 @@ export async function POST(request: Request) {
     .split(",")
     .map((id) => id.trim())
     .filter(Boolean);
+  const manualRuleStates = parseManualRuleStates(formData);
 
   if (!supabase) {
     const tradeId = crypto.randomUUID();
@@ -74,6 +94,7 @@ export async function POST(request: Request) {
         hasScreenshot: Boolean(screenshot),
         tradesToday: 0,
         manualRuleIds,
+        manualRuleStates,
       },
       demoRules,
     );
@@ -180,6 +201,7 @@ export async function POST(request: Request) {
       hasScreenshot: Boolean(screenshot),
       tradesToday: tradesToday ?? 0,
       manualRuleIds,
+      manualRuleStates,
     },
     rules,
   );
