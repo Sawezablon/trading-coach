@@ -89,7 +89,7 @@ export default async function Mt5SyncSettingsPage() {
             </CardDescription>
           </div>
           <Button asChild>
-            <a href="/downloads/QyvexEdgeSyncEA.mq5" download>
+            <a href="/api/mt5/ea" download="QyvexEdgeSyncEA.mq5">
               Download EA
             </a>
           </Button>

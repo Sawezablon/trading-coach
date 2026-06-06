@@ -4,7 +4,7 @@
 //| This EA does not place, modify, or close trades.                  |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "1.06"
+#property version   "1.08"
 #property description "Read-only Qyvex Edge trade sync EA."
 
 input string QyvexApiKey = "";
@@ -13,6 +13,10 @@ input int SyncIntervalMinutes = 5;
 input int InitialHistoryLookbackDays = 365;
 input int SyncOverlapMinutes = 10;
 input int ClosedTradeDetailLookupDays = 30;
+input bool EnableQuickReview = true;
+input string FallbackQuickReviewItems = "Confirmation candle closed;No revenge trading;Setup matches plan;Risk accepted";
+input int QuickReviewPanelX = 12;
+input int QuickReviewPanelY = 170;
 
 datetime g_lastSyncTime = 0;
 string g_lastStatus = "Waiting for first sync";
@@ -20,6 +24,20 @@ int g_lastTradesSent = 0;
 bool g_resyncRequested = false;
 int g_resyncLookbackDays = 0;
 string g_resyncRequestId = "";
+string g_quickReviewTicket = "";
+string g_quickReviewItems[8];
+int g_quickReviewItemCount = 0;
+string g_reviewQueueTickets[20];
+string g_reviewQueueLabels[20];
+int g_reviewQueueCount = 0;
+int g_reviewQueueIndex = 0;
+int g_checklistPage = 0;
+string g_reviewNoteTickets[20];
+string g_reviewNotes[20];
+int g_reviewNoteCount = 0;
+int g_panelX = 0;
+int g_panelY = 0;
+string g_reviewDraftStatus = "Draft";
 
 string StateKeyPrefix()
 {
@@ -34,6 +52,163 @@ string FirstSyncKey()
 string LastSuccessfulSyncKey()
 {
    return StateKeyPrefix() + "LastSuccessfulSync";
+}
+
+string PanelXKey()
+{
+   return StateKeyPrefix() + "QuickReviewPanelX";
+}
+
+string PanelYKey()
+{
+   return StateKeyPrefix() + "QuickReviewPanelY";
+}
+
+void LoadPanelPosition()
+{
+   g_panelX = QuickReviewPanelX;
+   g_panelY = QuickReviewPanelY;
+
+   if(GlobalVariableCheck(PanelXKey()))
+      g_panelX = (int)GlobalVariableGet(PanelXKey());
+
+   if(GlobalVariableCheck(PanelYKey()))
+      g_panelY = (int)GlobalVariableGet(PanelYKey());
+}
+
+void SavePanelPosition(int x, int y)
+{
+   g_panelX = MathMax(0, x);
+   g_panelY = MathMax(0, y);
+   GlobalVariableSet(PanelXKey(), g_panelX);
+   GlobalVariableSet(PanelYKey(), g_panelY);
+}
+
+string QuickReviewKey(string ticket, string key)
+{
+   return StateKeyPrefix() + "QuickReview_" + ticket + "_" + key;
+}
+
+double GetQuickReviewValue(string ticket, string key)
+{
+   string globalKey = QuickReviewKey(ticket, key);
+
+   if(!GlobalVariableCheck(globalKey))
+      return 0;
+
+   return GlobalVariableGet(globalKey);
+}
+
+void SetQuickReviewValue(string ticket, string key, double value)
+{
+   if(ticket == "")
+      return;
+
+   GlobalVariableSet(QuickReviewKey(ticket, key), value);
+}
+
+int GetQuickReviewCheckState(string ticket, int index)
+{
+   return (int)GetQuickReviewValue(ticket, "check_" + IntegerToString(index));
+}
+
+string QuickReviewCheckStatus(string ticket, int index)
+{
+   int state = GetQuickReviewCheckState(ticket, index);
+
+   if(state == 1)
+      return "passed";
+
+   if(state == 2)
+      return "failed";
+
+   return "unchecked";
+}
+
+void CycleQuickReviewCheck(string ticket, int index)
+{
+   int state = GetQuickReviewCheckState(ticket, index);
+   int nextState = state + 1;
+
+   if(nextState > 2)
+      nextState = 0;
+
+   SetQuickReviewValue(ticket, "check_" + IntegerToString(index), nextState);
+}
+
+int GetQuickReviewEmotion(string ticket)
+{
+   return (int)GetQuickReviewValue(ticket, "emotion");
+}
+
+void SetQuickReviewEmotion(string ticket, int emotion)
+{
+   SetQuickReviewValue(ticket, "emotion", emotion);
+}
+
+bool QuickReviewSubmitted(string ticket)
+{
+   return GetQuickReviewValue(ticket, "submitted") > 0;
+}
+
+void SetQuickReviewSubmitted(string ticket, bool submitted)
+{
+   SetQuickReviewValue(ticket, "submitted", submitted ? 1 : 0);
+}
+
+void MarkQuickReviewDraft(string ticket)
+{
+   SetQuickReviewSubmitted(ticket, false);
+   g_reviewDraftStatus = "Draft saved locally";
+}
+
+string GetQuickReviewNotes(string ticket)
+{
+   for(int index = 0; index < g_reviewNoteCount; index++)
+   {
+      if(g_reviewNoteTickets[index] == ticket)
+         return g_reviewNotes[index];
+   }
+
+   return "";
+}
+
+void SetQuickReviewNotes(string ticket, string notes)
+{
+   if(ticket == "")
+      return;
+
+   for(int index = 0; index < g_reviewNoteCount; index++)
+   {
+      if(g_reviewNoteTickets[index] == ticket)
+      {
+         g_reviewNotes[index] = notes;
+         return;
+      }
+   }
+
+   if(g_reviewNoteCount >= 20)
+      return;
+
+   g_reviewNoteTickets[g_reviewNoteCount] = ticket;
+   g_reviewNotes[g_reviewNoteCount] = notes;
+   g_reviewNoteCount++;
+}
+
+string QuickReviewEmotionLabel(int emotion)
+{
+   if(emotion == 1)
+      return "calm";
+   if(emotion == 2)
+      return "patient";
+   if(emotion == 3)
+      return "anxious";
+   if(emotion == 4)
+      return "fomo";
+   if(emotion == 5)
+      return "revenge";
+
+   return "";
 }
 
 bool FirstSyncDone()
@@ -115,6 +290,59 @@ string BaseUrl()
       return StringSubstr(SyncUrl, 0, marker);
 
    return SyncUrl;
+}
+
+void LoadChecklistFromText(string text)
+{
+   string parts[];
+   g_quickReviewItemCount = 0;
+   StringReplace(text, "|", ";");
+
+   int count = StringSplit(text, ';', parts);
+
+   for(int index = 0; index < count && g_quickReviewItemCount < 8; index++)
+   {
+      string item = parts[index];
+      StringTrimLeft(item);
+      StringTrimRight(item);
+
+      if(item == "")
+         continue;
+
+      g_quickReviewItems[g_quickReviewItemCount] = item;
+      g_quickReviewItemCount++;
+   }
+}
+
+void LoadFallbackChecklist()
+{
+   LoadChecklistFromText(FallbackQuickReviewItems);
+}
+
+void FetchRuleChecklist()
+{
+   LoadFallbackChecklist();
+
+   if(!EnableQuickReview || QyvexApiKey == "" || SyncUrl == "")
+      return;
+
+   string requestUrl = BaseUrl() + "/api/mt5/rules?apiKey=" + UrlEncode(QyvexApiKey);
+   char postData[];
+   char result[];
+   string resultHeaders = "";
+   string headers = "";
+
+   ResetLastError();
+   int statusCode = WebRequest("GET", requestUrl, headers, 10000, postData, result, resultHeaders);
+   string response = CharArrayToString(result, 0, -1, CP_UTF8);
+
+   if(statusCode < 200 || statusCode >= 300)
+      return;
+
+   string checklistText = ExtractJsonString(response, "checklistText");
+
+   if(checklistText != "")
+      LoadChecklistFromText(checklistText);
 }
 
 string ExtractJsonString(string json, string key)
@@ -205,6 +433,56 @@ bool IsClosingEntry(long entryType)
    return entryType == DEAL_ENTRY_OUT || entryType == DEAL_ENTRY_INOUT || entryType == DEAL_ENTRY_OUT_BY;
 }
 
+string BuildQuickReviewJson(string ticket)
+{
+   if(!QuickReviewSubmitted(ticket))
+      return "{}";
+
+   string json = "{";
+   int emotion = GetQuickReviewEmotion(ticket);
+   json += "\"emotion\":" + JsonString(QuickReviewEmotionLabel(emotion)) + ",";
+   json += "\"notes\":" + JsonString(GetQuickReviewNotes(ticket)) + ",";
+   json += "\"confirmation\":" + (GetQuickReviewCheckState(ticket, 0) == 1 ? "true" : "false") + ",";
+   json += "\"checklist\":[";
+
+   for(int index = 0; index < g_quickReviewItemCount; index++)
+   {
+      if(index > 0)
+         json += ",";
+
+      json += "{";
+      json += "\"id\":" + JsonString("ea-" + IntegerToString(index + 1)) + ",";
+      json += "\"label\":" + JsonString(g_quickReviewItems[index]) + ",";
+      json += "\"status\":" + JsonString(QuickReviewCheckStatus(ticket, index)) + ",";
+      json += "\"checked\":" + (GetQuickReviewCheckState(ticket, index) == 1 ? "true" : "false");
+      json += "}";
+   }
+
+   json += "]";
+   json += "}";
+   return json;
+}
+
+bool HasQuickReviewData(string ticket)
+{
+   if(!QuickReviewSubmitted(ticket))
+      return false;
+
+   if(GetQuickReviewEmotion(ticket) > 0)
+      return true;
+
+   if(GetQuickReviewNotes(ticket) != "")
+      return true;
+
+   for(int index = 0; index < g_quickReviewItemCount; index++)
+   {
+      if(GetQuickReviewCheckState(ticket, index) > 0)
+         return true;
+   }
+
+   return false;
+}
+
 string BuildTradeJson(
    string ticket,
    string symbol,
@@ -253,7 +531,8 @@ string BuildTradeJson(
    json += "\"contractSize\":" + JsonNumber(contractSize) + ",";
    json += "\"point\":" + JsonNumber(point) + ",";
    json += "\"digits\":" + IntegerToString((int)digits) + ",";
-   json += "\"status\":" + JsonString(status);
+   json += "\"status\":" + JsonString(status) + ",";
+   json += "\"quickReview\":" + BuildQuickReviewJson(ticket);
    json += "}";
    return json;
 }
@@ -423,7 +702,12 @@ int CollectClosedDeals(string &items)
       datetime closeTime = (datetime)HistoryDealGetInteger(dealTicket, DEAL_TIME);
 
       if(closeTime < closedHistoryFrom)
-         continue;
+      {
+         ulong reviewPositionId = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
+
+         if(!HasQuickReviewData(IntegerToString((long)reviewPositionId)))
+            continue;
+      }
 
       ulong positionId = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
       datetime openTime = 0;
@@ -524,6 +808,7 @@ void UpdateChartStatus()
       "Last sync: ", lastSync, "\n",
       "Status: ", g_lastStatus, "\n",
       "Trades sent: ", IntegerToString(g_lastTradesSent), "\n",
+      "Quick review: ", EnableQuickReview ? "enabled" : "disabled", " | Queue: ", IntegerToString(g_reviewQueueCount), "\n",
       "First history sync: ", FirstSyncDone() ? "done" : "pending", "\n",
       "Manual resync: ", g_resyncRequested ? "pending" : "none", "\n",
       "Sync URL: ", SyncUrl
@@ -664,6 +949,369 @@ bool SendTradeItems(string tradesJson, int tradesSent)
    return true;
 }
 
+bool ReviewQueueHasTicket(string ticket)
+{
+   for(int index = 0; index < g_reviewQueueCount; index++)
+   {
+      if(g_reviewQueueTickets[index] == ticket)
+         return true;
+   }
+
+   return false;
+}
+
+void AddReviewQueueItem(string ticket, string label)
+{
+   if(ticket == "" || ReviewQueueHasTicket(ticket) || g_reviewQueueCount >= 20)
+      return;
+
+   if(QuickReviewSubmitted(ticket))
+      return;
+
+   g_reviewQueueTickets[g_reviewQueueCount] = ticket;
+   g_reviewQueueLabels[g_reviewQueueCount] = label;
+   g_reviewQueueCount++;
+}
+
+string DirectionLabel(string direction)
+{
+   if(direction == "buy")
+      return "Buy";
+
+   if(direction == "sell")
+      return "Sell";
+
+   return "";
+}
+
+datetime TodayStart()
+{
+   return StringToTime(TimeToString(TimeCurrent(), TIME_DATE));
+}
+
+void BuildReviewQueue()
+{
+   string previousTicket = g_quickReviewTicket;
+   g_reviewQueueCount = 0;
+
+   int openTotal = PositionsTotal();
+
+   for(int index = 0; index < openTotal; index++)
+   {
+      ulong ticket = PositionGetTicket(index);
+
+      if(ticket == 0 || !PositionSelectByTicket(ticket))
+         continue;
+
+      string direction = DirectionFromPositionType(PositionGetInteger(POSITION_TYPE));
+      string label = PositionGetString(POSITION_SYMBOL) + " " + DirectionLabel(direction) + " open";
+      AddReviewQueueItem(IntegerToString((long)ticket), label);
+   }
+
+   datetime from = TodayStart();
+   datetime to = TimeCurrent();
+
+   if(HistorySelect(from, to))
+   {
+      int total = HistoryDealsTotal();
+
+      for(int dealIndex = total - 1; dealIndex >= 0; dealIndex--)
+      {
+         ulong dealTicket = HistoryDealGetTicket(dealIndex);
+
+         if(dealTicket == 0)
+            continue;
+
+         long dealEntry = HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
+
+         if(!IsClosingEntry(dealEntry))
+            continue;
+
+         long dealType = HistoryDealGetInteger(dealTicket, DEAL_TYPE);
+
+         if(dealType != DEAL_TYPE_BUY && dealType != DEAL_TYPE_SELL)
+            continue;
+
+         ulong positionId = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
+         double profit = HistoryDealGetDouble(dealTicket, DEAL_PROFIT);
+         string status = profit > 0 ? "win" : profit < 0 ? "loss" : "breakeven";
+         string direction = dealType == DEAL_TYPE_SELL ? "Buy" : "Sell";
+         string label = HistoryDealGetString(dealTicket, DEAL_SYMBOL) + " " + direction + " closed " + status;
+         AddReviewQueueItem(IntegerToString((long)positionId), label);
+      }
+   }
+
+   if(g_reviewQueueCount <= 0)
+   {
+      g_reviewQueueIndex = 0;
+      g_quickReviewTicket = "";
+      return;
+   }
+
+   int selectedIndex = -1;
+
+   for(int queueIndex = 0; queueIndex < g_reviewQueueCount; queueIndex++)
+   {
+      if(g_reviewQueueTickets[queueIndex] == previousTicket)
+      {
+         selectedIndex = queueIndex;
+         break;
+      }
+   }
+
+   if(selectedIndex < 0)
+      selectedIndex = 0;
+
+   g_reviewQueueIndex = selectedIndex;
+   g_quickReviewTicket = g_reviewQueueTickets[g_reviewQueueIndex];
+}
+
+string CurrentReviewLabel()
+{
+   if(g_reviewQueueCount <= 0 || g_reviewQueueIndex < 0 || g_reviewQueueIndex >= g_reviewQueueCount)
+      return "";
+
+   return g_reviewQueueLabels[g_reviewQueueIndex];
+}
+
+void MoveReviewQueue(int delta)
+{
+   if(g_reviewQueueCount <= 0)
+      return;
+
+   g_reviewQueueIndex += delta;
+
+   if(g_reviewQueueIndex < 0)
+      g_reviewQueueIndex = g_reviewQueueCount - 1;
+
+   if(g_reviewQueueIndex >= g_reviewQueueCount)
+      g_reviewQueueIndex = 0;
+
+   g_quickReviewTicket = g_reviewQueueTickets[g_reviewQueueIndex];
+}
+
+void DeleteQuickReviewObjects()
+{
+   int total = ObjectsTotal(0);
+
+   for(int index = total - 1; index >= 0; index--)
+   {
+      string name = ObjectName(0, index);
+
+      if(StringFind(name, "QYVEX_QR_") == 0)
+         ObjectDelete(0, name);
+   }
+}
+
+void CreateQuickReviewLabel(string name, string text, int x, int y, color textColor)
+{
+   ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, textColor);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
+   ObjectSetInteger(0, name, OBJPROP_BACK, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_ZORDER, 1000);
+   ObjectSetString(0, name, OBJPROP_FONT, "Arial");
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+}
+
+void CreateQuickReviewDragLabel(string name, string text, int x, int y, int width)
+{
+   ObjectCreate(0, name, OBJ_BUTTON, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, width);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, 22);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, clrMidnightBlue);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clrWhite);
+   ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, clrMediumPurple);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
+   ObjectSetInteger(0, name, OBJPROP_BACK, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, true);
+   ObjectSetInteger(0, name, OBJPROP_ZORDER, 1200);
+   ObjectSetString(0, name, OBJPROP_FONT, "Arial");
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+}
+
+void CreateQuickReviewBackground(int x, int y, int width, int height)
+{
+   string name = "QYVEX_QR_BACKGROUND";
+   ObjectCreate(0, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x - 8);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y - 8);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, width);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, height);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, clrBlack);
+   ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, clrMediumPurple);
+   ObjectSetInteger(0, name, OBJPROP_BACK, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, true);
+   ObjectSetInteger(0, name, OBJPROP_ZORDER, 900);
+}
+
+void CreateQuickReviewButton(string name, string text, int x, int y, int width, color backgroundColor)
+{
+   ObjectCreate(0, name, OBJ_BUTTON, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, width);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, 18);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, backgroundColor);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clrWhite);
+   ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, clrDimGray);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 7);
+   ObjectSetInteger(0, name, OBJPROP_BACK, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_ZORDER, 1100);
+   ObjectSetString(0, name, OBJPROP_FONT, "Arial");
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+}
+
+void CreateQuickReviewEdit(string name, string text, int x, int y, int width)
+{
+   ObjectCreate(0, name, OBJ_EDIT, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, width);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, 22);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, clrWhite);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clrBlack);
+   ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, clrDimGray);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
+   ObjectSetInteger(0, name, OBJPROP_BACK, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, false);
+   ObjectSetInteger(0, name, OBJPROP_ZORDER, 1150);
+   ObjectSetString(0, name, OBJPROP_FONT, "Arial");
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+}
+
+void RenderQuickReviewPanel()
+{
+   DeleteQuickReviewObjects();
+
+   if(!EnableQuickReview)
+      return;
+
+   BuildReviewQueue();
+   string ticket = g_quickReviewTicket;
+   int x = g_panelX;
+   int y = g_panelY;
+
+   CreateQuickReviewBackground(x, y, 354, 356);
+
+   CreateQuickReviewDragLabel("QYVEX_QR_DRAG", "Qyvex Edge Review  |  drag this bar", x, y, 338);
+   y += 30;
+
+   if(ticket == "")
+   {
+      CreateQuickReviewLabel("QYVEX_QR_WAITING", "No open or closed trades found today.", x + 10, y, clrSilver);
+      ChartRedraw(0);
+      return;
+   }
+
+   CreateQuickReviewLabel(
+      "QYVEX_QR_TICKET",
+      "Review " + IntegerToString(g_reviewQueueIndex + 1) + "/" + IntegerToString(g_reviewQueueCount) +
+         " | Ticket: " + ticket,
+      x + 10,
+      y,
+      clrSilver
+   );
+   y += 16;
+   CreateQuickReviewLabel("QYVEX_QR_LABEL", CurrentReviewLabel(), x + 10, y, clrWhite);
+   y += 24;
+
+   CreateQuickReviewButton("QYVEX_QR_PREV", "< Previous", x + 10, y, 96, clrDarkSlateGray);
+   CreateQuickReviewButton("QYVEX_QR_NEXT", "Next >", x + 114, y, 96, clrDarkSlateGray);
+   CreateQuickReviewButton("QYVEX_QR_LEFT", "<", x + 222, y, 24, clrMidnightBlue);
+   CreateQuickReviewButton("QYVEX_QR_UP", "^", x + 250, y, 24, clrMidnightBlue);
+   CreateQuickReviewButton("QYVEX_QR_DOWN", "v", x + 278, y, 24, clrMidnightBlue);
+   CreateQuickReviewButton("QYVEX_QR_RIGHT", ">", x + 306, y, 24, clrMidnightBlue);
+   y += 30;
+
+   CreateQuickReviewLabel("QYVEX_QR_EMOTION_LABEL", "Emotion before trade", x + 10, y, clrSilver);
+   y += 16;
+
+   int emotion = GetQuickReviewEmotion(ticket);
+   string emotionLabels[5] = {"Calm", "Patient", "Anxious", "FOMO", "Revenge"};
+
+   for(int index = 0; index < 5; index++)
+   {
+      color background = emotion == index + 1 ? clrMediumPurple : clrDarkSlateGray;
+      CreateQuickReviewButton("QYVEX_QR_EMOTION_" + IntegerToString(index + 1), emotionLabels[index], x + 10 + (index * 64), y, 60, background);
+   }
+
+   y += 30;
+   CreateQuickReviewLabel("QYVEX_QR_NOTES_LABEL", "Trade notes", x + 10, y, clrSilver);
+   y += 16;
+   CreateQuickReviewEdit("QYVEX_QR_NOTES", GetQuickReviewNotes(ticket), x + 10, y, 318);
+   y += 30;
+
+   int itemsPerPage = 5;
+   int totalPages = MathMax(1, (g_quickReviewItemCount + itemsPerPage - 1) / itemsPerPage);
+
+   if(g_checklistPage >= totalPages)
+      g_checklistPage = totalPages - 1;
+
+   if(g_checklistPage < 0)
+      g_checklistPage = 0;
+
+   CreateQuickReviewLabel(
+      "QYVEX_QR_CHECKLIST_LABEL",
+      "Checklist " + IntegerToString(g_checklistPage + 1) + "/" + IntegerToString(totalPages),
+      x + 10,
+      y,
+      clrSilver
+   );
+   if(totalPages > 1)
+   {
+      CreateQuickReviewButton("QYVEX_QR_RULES_PREV", "< Rules", x + 188, y - 4, 66, clrDarkSlateGray);
+      CreateQuickReviewButton("QYVEX_QR_RULES_NEXT", "Rules >", x + 262, y - 4, 66, clrDarkSlateGray);
+   }
+   y += 16;
+
+   int startItem = g_checklistPage * itemsPerPage;
+   int endItem = MathMin(g_quickReviewItemCount, startItem + itemsPerPage);
+
+   for(int itemIndex = startItem; itemIndex < endItem; itemIndex++)
+   {
+      int checkState = GetQuickReviewCheckState(ticket, itemIndex);
+      string prefix = "[ ] ";
+      color background = clrDarkSlateGray;
+
+      if(checkState == 1)
+      {
+         prefix = "[OK] ";
+         background = clrSeaGreen;
+      }
+      else if(checkState == 2)
+      {
+         prefix = "[X] ";
+         background = clrFireBrick;
+      }
+
+      string text = prefix + g_quickReviewItems[itemIndex];
+      CreateQuickReviewButton("QYVEX_QR_CHECK_" + IntegerToString(itemIndex), text, x + 10, y, 318, background);
+      y += 22;
+   }
+
+   y += 6;
+   CreateQuickReviewButton("QYVEX_QR_SUBMIT", "Submit Review", x + 10, y, 140, clrSeaGreen);
+   string statusText = QuickReviewSubmitted(ticket) ? "Submitted. Waiting for next Qyvex sync." : g_reviewDraftStatus;
+   CreateQuickReviewLabel("QYVEX_QR_NOTE", statusText, x + 160, y + 4, QuickReviewSubmitted(ticket) ? clrLime : clrSilver);
+   ChartRedraw(0);
+}
+
 void SyncNow()
 {
    if(QyvexApiKey == "" || SyncUrl == "")
@@ -671,6 +1319,7 @@ void SyncNow()
       g_lastStatus = "Missing API key or Sync URL";
       g_lastTradesSent = 0;
       UpdateChartStatus();
+      RenderQuickReviewPanel();
       return;
    }
 
@@ -684,15 +1333,19 @@ void SyncNow()
    SendTradeItems(tradesJson, tradesSent);
 
    UpdateChartStatus();
+   RenderQuickReviewPanel();
 }
 
 int OnInit()
 {
    int intervalSeconds = MathMax(1, SyncIntervalMinutes) * 60;
 
+   LoadPanelPosition();
+   FetchRuleChecklist();
    EventSetTimer(intervalSeconds);
    g_lastStatus = "Initialized";
    UpdateChartStatus();
+   RenderQuickReviewPanel();
    SyncNow();
 
    return INIT_SUCCEEDED;
@@ -701,10 +1354,129 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    EventKillTimer();
+   DeleteQuickReviewObjects();
    Comment("");
 }
 
 void OnTimer()
 {
+   FetchRuleChecklist();
    SyncNow();
+}
+
+void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
+{
+   if(!EnableQuickReview)
+      return;
+
+   if(id == CHARTEVENT_OBJECT_DRAG && (sparam == "QYVEX_QR_BACKGROUND" || sparam == "QYVEX_QR_DRAG"))
+   {
+      int x = (int)ObjectGetInteger(0, sparam, OBJPROP_XDISTANCE);
+      int y = (int)ObjectGetInteger(0, sparam, OBJPROP_YDISTANCE);
+
+      if(sparam == "QYVEX_QR_BACKGROUND")
+      {
+         x += 8;
+         y += 8;
+      }
+
+      SavePanelPosition(x, y);
+      RenderQuickReviewPanel();
+      return;
+   }
+
+   if(id == CHARTEVENT_OBJECT_ENDEDIT && sparam == "QYVEX_QR_NOTES" && g_quickReviewTicket != "")
+   {
+      SetQuickReviewNotes(g_quickReviewTicket, ObjectGetString(0, sparam, OBJPROP_TEXT));
+      MarkQuickReviewDraft(g_quickReviewTicket);
+      RenderQuickReviewPanel();
+      return;
+   }
+
+   if(id != CHARTEVENT_OBJECT_CLICK || g_quickReviewTicket == "")
+      return;
+
+   if(sparam == "QYVEX_QR_LEFT" || sparam == "QYVEX_QR_RIGHT" || sparam == "QYVEX_QR_UP" || sparam == "QYVEX_QR_DOWN")
+   {
+      int x = g_panelX;
+      int y = g_panelY;
+
+      if(sparam == "QYVEX_QR_LEFT")
+         x -= 20;
+      if(sparam == "QYVEX_QR_RIGHT")
+         x += 20;
+      if(sparam == "QYVEX_QR_UP")
+         y -= 20;
+      if(sparam == "QYVEX_QR_DOWN")
+         y += 20;
+
+      SavePanelPosition(x, y);
+      RenderQuickReviewPanel();
+      return;
+   }
+
+   if(sparam == "QYVEX_QR_PREV")
+   {
+      MoveReviewQueue(-1);
+      RenderQuickReviewPanel();
+      return;
+   }
+
+   if(sparam == "QYVEX_QR_NEXT")
+   {
+      MoveReviewQueue(1);
+      RenderQuickReviewPanel();
+      return;
+   }
+
+   if(sparam == "QYVEX_QR_RULES_PREV")
+   {
+      g_checklistPage = MathMax(0, g_checklistPage - 1);
+      RenderQuickReviewPanel();
+      return;
+   }
+
+   if(sparam == "QYVEX_QR_RULES_NEXT")
+   {
+      int itemsPerPage = 5;
+      int totalPages = MathMax(1, (g_quickReviewItemCount + itemsPerPage - 1) / itemsPerPage);
+      g_checklistPage = MathMin(totalPages - 1, g_checklistPage + 1);
+      RenderQuickReviewPanel();
+      return;
+   }
+
+   if(sparam == "QYVEX_QR_SUBMIT")
+   {
+      SetQuickReviewNotes(g_quickReviewTicket, ObjectGetString(0, "QYVEX_QR_NOTES", OBJPROP_TEXT));
+      SetQuickReviewSubmitted(g_quickReviewTicket, true);
+      g_reviewDraftStatus = "Submitted. Syncing...";
+      SyncNow();
+      BuildReviewQueue();
+      g_reviewDraftStatus = "Draft";
+      RenderQuickReviewPanel();
+      return;
+   }
+
+   if(StringFind(sparam, "QYVEX_QR_EMOTION_") == 0)
+   {
+      string rawEmotion = StringSubstr(sparam, StringLen("QYVEX_QR_EMOTION_"));
+      int emotion = (int)StringToInteger(rawEmotion);
+      SetQuickReviewEmotion(g_quickReviewTicket, emotion);
+      MarkQuickReviewDraft(g_quickReviewTicket);
+      RenderQuickReviewPanel();
+      return;
+   }
+
+   if(StringFind(sparam, "QYVEX_QR_CHECK_") == 0)
+   {
+      string rawIndex = StringSubstr(sparam, StringLen("QYVEX_QR_CHECK_"));
+      int index = (int)StringToInteger(rawIndex);
+
+      if(index >= 0 && index < g_quickReviewItemCount)
+      {
+         CycleQuickReviewCheck(g_quickReviewTicket, index);
+         MarkQuickReviewDraft(g_quickReviewTicket);
+         RenderQuickReviewPanel();
+      }
+   }
 }
