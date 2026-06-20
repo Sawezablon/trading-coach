@@ -906,7 +906,7 @@ function DailySnapshotHero({
     <section className="relative overflow-hidden rounded-3xl border border-primary/20 bg-[radial-gradient(circle_at_top_left,rgb(124_92_255/0.20),transparent_32%),linear-gradient(135deg,rgb(23_24_28),rgb(10_10_11))] p-5 shadow-[0_30px_120px_rgb(0_0_0/0.28)] sm:p-6">
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent" />
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="space-y-6">
+        <div className="flex min-h-full flex-col gap-6">
           <div className="flex flex-wrap items-center gap-2">
             <Badge className={getStatusClass(commandState.tone)}>{commandState.badge}</Badge>
             <Badge variant="outline" className="rounded-full bg-background/40">
@@ -941,6 +941,64 @@ function DailySnapshotHero({
               value={connection ? "Synced" : "Not connected"}
               icon={<IconMark text="AC" />}
             />
+          </div>
+
+          <div className="mt-auto grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-border/70 bg-background/35 p-4 backdrop-blur">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium text-sm">Capital protection</div>
+                  <div className="mt-1 text-muted-foreground text-xs">Monthly loss capacity before the plan limit.</div>
+                </div>
+                <Badge
+                  className={
+                    monthlyPerformance.safeRemainingRiskPercent > 0
+                      ? "bg-[#22C55E]/10 text-[#22C55E]"
+                      : "bg-destructive/10 text-destructive"
+                  }
+                >
+                  {formatUnsignedPercent(monthlyPerformance.safeRemainingRiskPercent)} left
+                </Badge>
+              </div>
+              <div className="mt-4 flex items-end justify-between gap-3">
+                <div>
+                  <div className="text-muted-foreground text-xs">Loss budget used</div>
+                  <div className="mt-1 font-semibold text-2xl">{Math.round(monthlyPerformance.lossProgress)}%</div>
+                </div>
+                <div className="text-right text-muted-foreground text-xs">
+                  Limit {formatUnsignedPercent(monthlyPerformance.plan.max_monthly_loss_percent)}
+                </div>
+              </div>
+              <Progress value={monthlyPerformance.lossProgress} className="mt-3" />
+            </div>
+
+            <div className="rounded-2xl border border-primary/20 bg-primary/10 p-4 shadow-[0_0_42px_rgb(124_92_255/0.08)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium text-sm">Next trade gate</div>
+                  <div className="mt-1 text-muted-foreground text-xs">What must happen before another setup.</div>
+                </div>
+                <Badge variant="outline" className="border-primary/25 bg-background/30 text-primary">
+                  {commandState.tone === "danger" ? "Locked by plan" : "Process check"}
+                </Badge>
+              </div>
+              <div className="mt-4 font-semibold text-lg">
+                {commandState.tone === "danger"
+                  ? "Review first. Reduce risk or pause."
+                  : metrics.needsReviewTrades > 0
+                    ? `Clear ${metrics.needsReviewTrades} pending review${metrics.needsReviewTrades === 1 ? "" : "s"}.`
+                    : "Trade only when the setup matches the plan."}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
+                {monthlyPerformance.losingStreak > 0 ? (
+                  <span>{monthlyPerformance.losingStreak}-loss streak</span>
+                ) : (
+                  <span>No active losing streak</span>
+                )}
+                <span aria-hidden="true">·</span>
+                <span>{metrics.needsReviewTrades} reviews pending</span>
+              </div>
+            </div>
           </div>
         </div>
 
