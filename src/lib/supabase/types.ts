@@ -125,6 +125,9 @@ export type Mt5Connection = {
   broker: string | null;
   account_nickname: string;
   prop_firm: string | null;
+  account_balance: number | null;
+  account_equity: number | null;
+  account_currency: string | null;
   last_sync_at: string | null;
   is_active: boolean;
   created_at: string;

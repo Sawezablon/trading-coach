@@ -4,7 +4,7 @@
 //| This EA does not place, modify, or close trades.                  |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "1.08"
+#property version   "1.09"
 #property description "Read-only Qyvex Edge trade sync EA."
 
 input string QyvexApiKey = "";
@@ -629,6 +629,31 @@ bool FindEntryDeal(ulong positionId, datetime &openTime, double &entryPrice, str
    return found;
 }
 
+void GetPositionFinancialTotals(ulong positionId, double &profit, double &commission, double &swap)
+{
+   profit = 0.0;
+   commission = 0.0;
+   swap = 0.0;
+   int total = HistoryDealsTotal();
+
+   for(int index = 0; index < total; index++)
+   {
+      ulong dealTicket = HistoryDealGetTicket(index);
+
+      if(dealTicket == 0)
+         continue;
+
+      ulong dealPositionId = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
+
+      if(dealPositionId != positionId)
+         continue;
+
+      profit += HistoryDealGetDouble(dealTicket, DEAL_PROFIT);
+      commission += HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
+      swap += HistoryDealGetDouble(dealTicket, DEAL_SWAP);
+   }
+}
+
 void FindPositionProtectionLevels(ulong positionId, double &stopLoss, double &takeProfit)
 {
    int total = HistoryOrdersTotal();
@@ -716,6 +741,9 @@ int CollectClosedDeals(string &items)
       double lotSize = HistoryDealGetDouble(dealTicket, DEAL_VOLUME);
       double stopLoss = 0.0;
       double takeProfit = 0.0;
+      double positionProfit = 0.0;
+      double positionCommission = 0.0;
+      double positionSwap = 0.0;
 
       if(!FindEntryDeal(positionId, openTime, entryPrice, direction, lotSize))
       {
@@ -724,6 +752,7 @@ int CollectClosedDeals(string &items)
       }
 
       FindPositionProtectionLevels(positionId, stopLoss, takeProfit);
+      GetPositionFinancialTotals(positionId, positionProfit, positionCommission, positionSwap);
 
       string tradeJson = BuildTradeJson(
          IntegerToString((long)positionId),
@@ -736,9 +765,9 @@ int CollectClosedDeals(string &items)
          openTime,
          closeTime,
          HistoryDealGetDouble(dealTicket, DEAL_PRICE),
-         HistoryDealGetDouble(dealTicket, DEAL_PROFIT),
-         HistoryDealGetDouble(dealTicket, DEAL_COMMISSION),
-         HistoryDealGetDouble(dealTicket, DEAL_SWAP),
+         positionProfit,
+         positionCommission,
+         positionSwap,
          "closed"
       );
 
@@ -754,6 +783,9 @@ string BuildSyncPayload(string tradesJson)
    payload += "\"apiKey\":" + JsonString(QyvexApiKey) + ",";
    payload += "\"accountNumber\":" + JsonString(IntegerToString((long)AccountInfoInteger(ACCOUNT_LOGIN))) + ",";
    payload += "\"broker\":" + JsonString(AccountInfoString(ACCOUNT_SERVER)) + ",";
+   payload += "\"accountBalance\":" + JsonNumber(AccountInfoDouble(ACCOUNT_BALANCE)) + ",";
+   payload += "\"accountEquity\":" + JsonNumber(AccountInfoDouble(ACCOUNT_EQUITY)) + ",";
+   payload += "\"accountCurrency\":" + JsonString(AccountInfoString(ACCOUNT_CURRENCY)) + ",";
    if(g_resyncRequested && g_resyncRequestId != "")
       payload += "\"syncRequestId\":" + JsonString(g_resyncRequestId) + ",";
    payload += "\"trades\":[" + tradesJson + "]";

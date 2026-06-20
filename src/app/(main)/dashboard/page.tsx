@@ -142,6 +142,27 @@ function formatSignedMoney(value: number) {
   return `${rounded > 0 ? "+" : ""}${rounded}`;
 }
 
+function formatAccountMoney(value: number | null, currency: string, signed = false) {
+  if (value === null) {
+    return "Not synced";
+  }
+
+  try {
+    return new Intl.NumberFormat("en-US", {
+      currency,
+      currencyDisplay: "narrowSymbol",
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 2,
+      signDisplay: signed ? "exceptZero" : "auto",
+      style: "currency",
+    }).format(value);
+  } catch {
+    const amount = Math.abs(value).toFixed(2);
+    const sign = value < 0 ? "-" : signed && value > 0 ? "+" : "";
+    return `${sign}${currency} ${amount}`;
+  }
+}
+
 function formatUnsignedPercent(value: number) {
   return `${Number(Math.abs(value).toFixed(2))}%`;
 }
@@ -184,6 +205,51 @@ function getTradeProfitPercent(trade: TradeWithAnalysis) {
   const profit = Number(trade.profit_loss_amount ?? 0);
 
   return balance > 0 ? (profit / balance) * 100 : 0;
+}
+
+function getAccountFinancials(trades: TradeWithAnalysis[], connection: Mt5ConnectionStatus | null) {
+  const closedTrades = trades.filter((trade) => trade.status === "closed");
+  const latestTradeSnapshot = trades
+    .filter(
+      (trade) =>
+        trade.account_balance_at_sync !== null ||
+        trade.account_equity_at_sync !== null ||
+        trade.account_currency !== null,
+    )
+    .sort((left, right) => {
+      const leftTime = new Date(left.last_synced_at ?? left.updated_at).getTime();
+      const rightTime = new Date(right.last_synced_at ?? right.updated_at).getTime();
+      return rightTime - leftTime;
+    })[0];
+  const grossProfitLoss = Number(
+    closedTrades.reduce((sum, trade) => sum + Number(trade.profit_loss_amount ?? 0), 0).toFixed(2),
+  );
+  const commission = Number(closedTrades.reduce((sum, trade) => sum + Number(trade.commission ?? 0), 0).toFixed(2));
+  const swap = Number(closedTrades.reduce((sum, trade) => sum + Number(trade.swap ?? 0), 0).toFixed(2));
+  const tradingCosts = Number((commission + swap).toFixed(2));
+  const netProfitLoss = Number((grossProfitLoss + tradingCosts).toFixed(2));
+  const currency = connection?.account_currency ?? latestTradeSnapshot?.account_currency ?? "USD";
+  const balance = connection?.account_balance ?? latestTradeSnapshot?.account_balance_at_sync ?? null;
+  const equity = connection?.account_equity ?? latestTradeSnapshot?.account_equity_at_sync ?? balance;
+  const costShareOfLoss =
+    netProfitLoss < 0 && tradingCosts < 0
+      ? Math.min(100, Math.round((Math.abs(tradingCosts) / Math.abs(netProfitLoss)) * 100))
+      : 0;
+
+  return {
+    balance,
+    commission,
+    costShareOfLoss,
+    currency,
+    equity,
+    grossProfitLoss,
+    hasCostData: closedTrades.some((trade) => trade.commission !== null || trade.swap !== null),
+    netProfitLoss,
+    snapshotAt: connection?.last_sync_at ?? latestTradeSnapshot?.last_synced_at ?? null,
+    swap,
+    trackedTrades: closedTrades.length,
+    tradingCosts,
+  };
 }
 
 function tradeHasRulePressure(trade: TradeWithAnalysis) {
@@ -586,7 +652,12 @@ function getDisciplineIntelligence({
   };
 }
 
-function getDashboardModel(trades: TradeWithAnalysis[], performancePlan: PerformancePlan, selectedMonth: Date) {
+function getDashboardModel(
+  trades: TradeWithAnalysis[],
+  performancePlan: PerformancePlan,
+  selectedMonth: Date,
+  connection: Mt5ConnectionStatus | null,
+) {
   const metrics = calculateDashboardMetrics(trades);
   const todayTrades = trades.filter((trade) => isToday(trade.trade_taken_at));
   const todayDiscipline = average(todayTrades.map(getTradeDiscipline));
@@ -625,8 +696,10 @@ function getDashboardModel(trades: TradeWithAnalysis[], performancePlan: Perform
     trades,
   });
   const monthlyPerformance = getMonthlyPerformanceModel(trades, performancePlan, selectedMonth);
+  const accountFinancials = getAccountFinancials(trades, connection);
 
   return {
+    accountFinancials,
     behaviorState,
     behaviorTone,
     dominantEmotion,
@@ -662,7 +735,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ m
     trades: allTrades,
   });
   const performancePlan = getActivePerformancePlan(performancePlans, selectedConnectionId);
-  const model = getDashboardModel(trades, performancePlan, selectedMonth);
+  const model = getDashboardModel(trades, performancePlan, selectedMonth, selectedConnection);
 
   return (
     <div className="flex flex-col gap-6 pb-8">
@@ -822,7 +895,7 @@ function DailySnapshotHero({
   connection: Mt5ConnectionStatus | null;
   model: ReturnType<typeof getDashboardModel>;
 }) {
-  const { metrics, monthlyPerformance, reviewCompletion, ruleAdherence, todayTrades } = model;
+  const { accountFinancials, metrics, monthlyPerformance, reviewCompletion, ruleAdherence, todayTrades } = model;
   const commandState = getCommandCenterState({ connection, model });
   const primaryValueClass =
     commandState.primaryValue.length > 8
@@ -875,15 +948,93 @@ function DailySnapshotHero({
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="font-medium">Account health</div>
-              <div className="text-muted-foreground text-xs">Current account and monthly context.</div>
+              <div className="text-muted-foreground text-xs">Latest capital snapshot and tracked account impact.</div>
             </div>
             <Badge variant="outline">{connection ? getMt5ConnectionLabel(connection) : "No account"}</Badge>
           </div>
+
+          <div className="grid gap-3 sm:grid-cols-[1.15fr_0.85fr]">
+            <div className="rounded-2xl border border-primary/20 bg-primary/10 p-4 shadow-[0_0_42px_rgb(124_92_255/0.08)]">
+              <div className="text-muted-foreground text-xs">Current balance</div>
+              <div className="mt-1 font-semibold text-3xl tracking-tight">
+                {formatAccountMoney(accountFinancials.balance, accountFinancials.currency)}
+              </div>
+              <div className="mt-2 text-muted-foreground text-xs">
+                {accountFinancials.snapshotAt
+                  ? `MT5 snapshot · ${formatShortDate(accountFinancials.snapshotAt)}`
+                  : "Waiting for the next MT5 sync"}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-background/30 p-4">
+              <div className="text-muted-foreground text-xs">Current equity</div>
+              <div className="mt-1 font-semibold text-2xl tracking-tight">
+                {formatAccountMoney(accountFinancials.equity, accountFinancials.currency)}
+              </div>
+              <div className="mt-2 text-muted-foreground text-xs">
+                {accountFinancials.balance !== null && accountFinancials.equity !== null
+                  ? `${formatAccountMoney(
+                      accountFinancials.equity - accountFinancials.balance,
+                      accountFinancials.currency,
+                      true,
+                    )} floating`
+                  : "Updates with open positions"}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border/70 bg-background/30 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-medium text-sm">Tracked account impact</div>
+                <div className="text-muted-foreground text-xs">
+                  {accountFinancials.trackedTrades} closed trade{accountFinancials.trackedTrades === 1 ? "" : "s"}{" "}
+                  imported
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-muted-foreground text-xs">Net P/L after costs</div>
+                <div
+                  className={`font-semibold text-xl ${
+                    accountFinancials.netProfitLoss < 0
+                      ? "text-destructive"
+                      : accountFinancials.netProfitLoss > 0
+                        ? "text-[#22C55E]"
+                        : "text-foreground"
+                  }`}
+                >
+                  {formatAccountMoney(accountFinancials.netProfitLoss, accountFinancials.currency, true)}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <FinancialLine
+                label="Gross trade P/L"
+                value={formatAccountMoney(accountFinancials.grossProfitLoss, accountFinancials.currency, true)}
+              />
+              <FinancialLine
+                label="Commission"
+                value={formatAccountMoney(accountFinancials.commission, accountFinancials.currency, true)}
+              />
+              <FinancialLine
+                label="Swap"
+                value={formatAccountMoney(accountFinancials.swap, accountFinancials.currency, true)}
+              />
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-border/60 border-t pt-3 text-xs">
+              <span className="text-muted-foreground">Net P/L = gross P/L + commission + swap</span>
+              {accountFinancials.hasCostData && accountFinancials.costShareOfLoss > 0 ? (
+                <Badge variant="outline" className="border-warning/25 bg-warning/10 text-warning">
+                  Costs caused {accountFinancials.costShareOfLoss}% of tracked loss
+                </Badge>
+              ) : null}
+            </div>
+          </div>
+
           <div className="grid gap-3 sm:grid-cols-2">
             <HeroMetric label="Needs review" value={metrics.needsReviewTrades} tone="warning" />
             <HeroMetric label="System alerts" value={metrics.systemAlerts} tone="warning" />
-            <HeroMetric label="Win rate" value={`${metrics.winRate}%`} tone="neutral" />
-            <HeroMetric label="Total P/L" value={metrics.totalProfitLoss} tone="neutral" />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
@@ -1558,6 +1709,15 @@ function HeroMetric({
     <div className="rounded-2xl border border-border/70 bg-background/30 p-3">
       <div className="text-muted-foreground text-xs">{label}</div>
       <div className={`mt-1 font-semibold text-2xl ${toneClass}`}>{value}</div>
+    </div>
+  );
+}
+
+function FinancialLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border/60 bg-background/35 px-3 py-2.5">
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <div className="mt-1 font-medium text-sm">{value}</div>
     </div>
   );
 }

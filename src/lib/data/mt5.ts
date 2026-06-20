@@ -8,11 +8,25 @@ export type Mt5ConnectionStatus = Pick<
   | "broker"
   | "account_nickname"
   | "prop_firm"
+  | "account_balance"
+  | "account_equity"
+  | "account_currency"
   | "last_sync_at"
   | "is_active"
   | "created_at"
   | "updated_at"
 >;
+
+function isMissingAccountSnapshotColumn(error: { code?: string; message: string } | null) {
+  return Boolean(
+    error &&
+      (error.code === "42703" ||
+        error.code === "PGRST204" ||
+        error.message.includes("account_balance") ||
+        error.message.includes("account_equity") ||
+        error.message.includes("account_currency")),
+  );
+}
 
 export async function getMt5Connections(): Promise<Mt5ConnectionStatus[]> {
   const supabase = await createSupabaseServerClient();
@@ -29,13 +43,35 @@ export async function getMt5Connections(): Promise<Mt5ConnectionStatus[]> {
     return [];
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("mt5_connections")
-    .select("id, account_number, broker, account_nickname, prop_firm, last_sync_at, is_active, created_at, updated_at")
+    .select(
+      "id, account_number, broker, account_nickname, prop_firm, account_balance, account_equity, account_currency, last_sync_at, is_active, created_at, updated_at",
+    )
     .eq("user_id", user.id)
     .eq("is_active", true)
     .order("last_sync_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });
+
+  if (isMissingAccountSnapshotColumn(error)) {
+    const fallbackResult = await supabase
+      .from("mt5_connections")
+      .select(
+        "id, account_number, broker, account_nickname, prop_firm, last_sync_at, is_active, created_at, updated_at",
+      )
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .order("last_sync_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false });
+
+    data = (fallbackResult.data ?? []).map((connection) => ({
+      ...connection,
+      account_balance: null,
+      account_currency: null,
+      account_equity: null,
+    }));
+    error = fallbackResult.error;
+  }
 
   if (error) {
     throw new Error(error.message);

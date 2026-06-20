@@ -10,6 +10,9 @@ export type Mt5SyncPayload = {
   apiKey?: unknown;
   accountNumber?: unknown;
   broker?: unknown;
+  accountBalance?: unknown;
+  accountEquity?: unknown;
+  accountCurrency?: unknown;
   trades?: unknown;
   syncRequestId?: unknown;
 };
@@ -758,6 +761,9 @@ export async function syncMt5Trades(
 
   const accountNumber = stringValue(payload.accountNumber);
   const broker = optionalString(payload.broker);
+  const accountBalance = positiveNumberValue(payload.accountBalance);
+  const accountEquity = positiveNumberValue(payload.accountEquity);
+  const accountCurrency = optionalString(payload.accountCurrency);
   const syncRequestId = optionalString(payload.syncRequestId);
 
   if (!accountNumber) {
@@ -922,15 +928,38 @@ export async function syncMt5Trades(
     };
   }
 
-  const { error: syncUpdateError } = await supabase
+  const connectionSnapshot = {
+    account_balance: accountBalance,
+    account_equity: accountEquity,
+    account_currency: accountCurrency,
+    account_number: accountNumber,
+    broker,
+    last_sync_at: syncedAt,
+    is_active: true,
+  };
+  let { error: syncUpdateError } = await supabase
     .from("mt5_connections")
-    .update({
-      account_number: accountNumber,
-      broker,
-      last_sync_at: syncedAt,
-      is_active: true,
-    })
+    .update(connectionSnapshot)
     .eq("id", activeConnectionId);
+
+  if (
+    syncUpdateError &&
+    (syncUpdateError.code === "42703" ||
+      syncUpdateError.code === "PGRST204" ||
+      syncUpdateError.message.includes("account_balance"))
+  ) {
+    const fallbackUpdate = await supabase
+      .from("mt5_connections")
+      .update({
+        account_number: accountNumber,
+        broker,
+        last_sync_at: syncedAt,
+        is_active: true,
+      })
+      .eq("id", activeConnectionId);
+
+    syncUpdateError = fallbackUpdate.error;
+  }
 
   if (syncUpdateError) {
     return { error: syncUpdateError.message, status: 400 };
