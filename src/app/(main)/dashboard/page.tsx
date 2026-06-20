@@ -227,13 +227,19 @@ function getAccountFinancials(trades: TradeWithAnalysis[], connection: Mt5Connec
   const commission = Number(closedTrades.reduce((sum, trade) => sum + Number(trade.commission ?? 0), 0).toFixed(2));
   const swap = Number(closedTrades.reduce((sum, trade) => sum + Number(trade.swap ?? 0), 0).toFixed(2));
   const tradingCosts = Number((commission + swap).toFixed(2));
-  const netProfitLoss = Number((grossProfitLoss + tradingCosts).toFixed(2));
+  const trackedNetProfitLoss = Number((grossProfitLoss + tradingCosts).toFixed(2));
   const currency = connection?.account_currency ?? latestTradeSnapshot?.account_currency ?? "USD";
   const balance = connection?.account_balance ?? latestTradeSnapshot?.account_balance_at_sync ?? null;
   const equity = connection?.account_equity ?? latestTradeSnapshot?.account_equity_at_sync ?? balance;
+  const netFunding =
+    connection?.account_net_funding && connection.account_net_funding > 0 ? connection.account_net_funding : null;
+  const hasFundingBaseline = balance !== null && netFunding !== null;
+  const netProfitLoss = hasFundingBaseline ? Number((balance - netFunding).toFixed(2)) : trackedNetProfitLoss;
+  const otherAccountCosts = hasFundingBaseline ? Number((netProfitLoss - trackedNetProfitLoss).toFixed(2)) : 0;
+  const totalAccountCosts = Number((netProfitLoss - grossProfitLoss).toFixed(2));
   const costShareOfLoss =
-    netProfitLoss < 0 && tradingCosts < 0
-      ? Math.min(100, Math.round((Math.abs(tradingCosts) / Math.abs(netProfitLoss)) * 100))
+    netProfitLoss < 0 && totalAccountCosts < 0
+      ? Math.min(100, Math.round((Math.abs(totalAccountCosts) / Math.abs(netProfitLoss)) * 100))
       : 0;
 
   return {
@@ -243,11 +249,15 @@ function getAccountFinancials(trades: TradeWithAnalysis[], connection: Mt5Connec
     currency,
     equity,
     grossProfitLoss,
+    hasFundingBaseline,
     hasCostData: closedTrades.some((trade) => trade.commission !== null || trade.swap !== null),
     netProfitLoss,
+    netFunding,
+    otherAccountCosts,
     snapshotAt: connection?.last_sync_at ?? latestTradeSnapshot?.last_synced_at ?? null,
     swap,
     trackedTrades: closedTrades.length,
+    trackedNetProfitLoss,
     tradingCosts,
   };
 }
@@ -995,7 +1005,7 @@ function DailySnapshotHero({
                 ) : (
                   <span>No active losing streak</span>
                 )}
-                <span aria-hidden="true">·</span>
+                <span aria-hidden="true">-</span>
                 <span>{metrics.needsReviewTrades} reviews pending</span>
               </div>
             </div>
@@ -1019,7 +1029,7 @@ function DailySnapshotHero({
               </div>
               <div className="mt-2 text-muted-foreground text-xs">
                 {accountFinancials.snapshotAt
-                  ? `MT5 snapshot · ${formatShortDate(accountFinancials.snapshotAt)}`
+                  ? `MT5 snapshot - ${formatShortDate(accountFinancials.snapshotAt)}`
                   : "Waiting for the next MT5 sync"}
               </div>
             </div>
@@ -1043,14 +1053,19 @@ function DailySnapshotHero({
           <div className="rounded-2xl border border-border/70 bg-background/30 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="font-medium text-sm">Tracked account impact</div>
+                <div className="font-medium text-sm">Account impact</div>
                 <div className="text-muted-foreground text-xs">
+                  {accountFinancials.hasFundingBaseline
+                    ? `${formatAccountMoney(accountFinancials.netFunding, accountFinancials.currency)} net funding - `
+                    : ""}
                   {accountFinancials.trackedTrades} closed trade{accountFinancials.trackedTrades === 1 ? "" : "s"}{" "}
                   imported
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-muted-foreground text-xs">Net P/L after costs</div>
+                <div className="text-muted-foreground text-xs">
+                  {accountFinancials.hasFundingBaseline ? "Account net P/L" : "Tracked net P/L"}
+                </div>
                 <div
                   className={`font-semibold text-xl ${
                     accountFinancials.netProfitLoss < 0
@@ -1065,7 +1080,7 @@ function DailySnapshotHero({
               </div>
             </div>
 
-            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
               <FinancialLine
                 label="Gross trade P/L"
                 value={formatAccountMoney(accountFinancials.grossProfitLoss, accountFinancials.currency, true)}
@@ -1078,13 +1093,21 @@ function DailySnapshotHero({
                 label="Swap"
                 value={formatAccountMoney(accountFinancials.swap, accountFinancials.currency, true)}
               />
+              <FinancialLine
+                label="Other costs / adjustments"
+                value={formatAccountMoney(accountFinancials.otherAccountCosts, accountFinancials.currency, true)}
+              />
             </div>
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-border/60 border-t pt-3 text-xs">
-              <span className="text-muted-foreground">Net P/L = gross P/L + commission + swap</span>
+              <span className="text-muted-foreground">
+                {accountFinancials.hasFundingBaseline
+                  ? "Account net P/L = current balance - net funding"
+                  : "Tracked net P/L = gross P/L + commission + swap"}
+              </span>
               {accountFinancials.hasCostData && accountFinancials.costShareOfLoss > 0 ? (
                 <Badge variant="outline" className="border-warning/25 bg-warning/10 text-warning">
-                  Costs caused {accountFinancials.costShareOfLoss}% of tracked loss
+                  Costs caused {accountFinancials.costShareOfLoss}% of account loss
                 </Badge>
               ) : null}
             </div>

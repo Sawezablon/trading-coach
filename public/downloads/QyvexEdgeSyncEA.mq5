@@ -4,7 +4,7 @@
 //| This EA does not place, modify, or close trades.                  |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "1.09"
+#property version   "1.10"
 #property description "Read-only Qyvex Edge trade sync EA."
 
 input string QyvexApiKey = "";
@@ -38,6 +38,7 @@ int g_reviewNoteCount = 0;
 int g_panelX = 0;
 int g_panelY = 0;
 string g_reviewDraftStatus = "Draft";
+double g_accountNetFunding = 0.0;
 
 string StateKeyPrefix()
 {
@@ -786,11 +787,36 @@ string BuildSyncPayload(string tradesJson)
    payload += "\"accountBalance\":" + JsonNumber(AccountInfoDouble(ACCOUNT_BALANCE)) + ",";
    payload += "\"accountEquity\":" + JsonNumber(AccountInfoDouble(ACCOUNT_EQUITY)) + ",";
    payload += "\"accountCurrency\":" + JsonString(AccountInfoString(ACCOUNT_CURRENCY)) + ",";
+   payload += "\"accountNetFunding\":" + JsonNumber(g_accountNetFunding) + ",";
    if(g_resyncRequested && g_resyncRequestId != "")
       payload += "\"syncRequestId\":" + JsonString(g_resyncRequestId) + ",";
    payload += "\"trades\":[" + tradesJson + "]";
    payload += "}";
    return payload;
+}
+
+double CalculateAccountNetFunding()
+{
+   if(!HistorySelect(0, TimeCurrent()))
+      return 0.0;
+
+   double netFunding = 0.0;
+   int total = HistoryDealsTotal();
+
+   for(int index = 0; index < total; index++)
+   {
+      ulong dealTicket = HistoryDealGetTicket(index);
+
+      if(dealTicket == 0)
+         continue;
+
+      long dealType = HistoryDealGetInteger(dealTicket, DEAL_TYPE);
+
+      if(dealType == DEAL_TYPE_BALANCE)
+         netFunding += HistoryDealGetDouble(dealTicket, DEAL_PROFIT);
+   }
+
+   return netFunding;
 }
 
 bool ExtractNextJsonObject(string source, int &cursor, string &item)
@@ -1359,6 +1385,7 @@ void SyncNow()
    int tradesSent = 0;
 
    CheckResyncRequest();
+   g_accountNetFunding = CalculateAccountNetFunding();
    tradesSent += CollectOpenPositions(tradesJson);
    tradesSent += CollectClosedDeals(tradesJson);
 

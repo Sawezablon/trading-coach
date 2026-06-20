@@ -13,6 +13,7 @@ export type Mt5SyncPayload = {
   accountBalance?: unknown;
   accountEquity?: unknown;
   accountCurrency?: unknown;
+  accountNetFunding?: unknown;
   trades?: unknown;
   syncRequestId?: unknown;
 };
@@ -764,6 +765,7 @@ export async function syncMt5Trades(
   const accountBalance = positiveNumberValue(payload.accountBalance);
   const accountEquity = positiveNumberValue(payload.accountEquity);
   const accountCurrency = optionalString(payload.accountCurrency);
+  const accountNetFunding = positiveNumberValue(payload.accountNetFunding);
   const syncRequestId = optionalString(payload.syncRequestId);
 
   if (!accountNumber) {
@@ -932,6 +934,7 @@ export async function syncMt5Trades(
     account_balance: accountBalance,
     account_equity: accountEquity,
     account_currency: accountCurrency,
+    account_net_funding: accountNetFunding,
     account_number: accountNumber,
     broker,
     last_sync_at: syncedAt,
@@ -946,7 +949,8 @@ export async function syncMt5Trades(
     syncUpdateError &&
     (syncUpdateError.code === "42703" ||
       syncUpdateError.code === "PGRST204" ||
-      syncUpdateError.message.includes("account_balance"))
+      syncUpdateError.message.includes("account_balance") ||
+      syncUpdateError.message.includes("account_net_funding"))
   ) {
     const fallbackUpdate = await supabase
       .from("mt5_connections")

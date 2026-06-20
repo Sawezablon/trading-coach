@@ -133,6 +133,7 @@ create table if not exists public.mt5_connections (
   account_balance numeric,
   account_equity numeric,
   account_currency text,
+  account_net_funding numeric,
   last_sync_at timestamptz,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),

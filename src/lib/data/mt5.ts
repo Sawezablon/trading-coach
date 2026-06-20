@@ -11,6 +11,7 @@ export type Mt5ConnectionStatus = Pick<
   | "account_balance"
   | "account_equity"
   | "account_currency"
+  | "account_net_funding"
   | "last_sync_at"
   | "is_active"
   | "created_at"
@@ -24,7 +25,8 @@ function isMissingAccountSnapshotColumn(error: { code?: string; message: string 
         error.code === "PGRST204" ||
         error.message.includes("account_balance") ||
         error.message.includes("account_equity") ||
-        error.message.includes("account_currency")),
+        error.message.includes("account_currency") ||
+        error.message.includes("account_net_funding")),
   );
 }
 
@@ -46,7 +48,7 @@ export async function getMt5Connections(): Promise<Mt5ConnectionStatus[]> {
   let { data, error } = await supabase
     .from("mt5_connections")
     .select(
-      "id, account_number, broker, account_nickname, prop_firm, account_balance, account_equity, account_currency, last_sync_at, is_active, created_at, updated_at",
+      "id, account_number, broker, account_nickname, prop_firm, account_balance, account_equity, account_currency, account_net_funding, last_sync_at, is_active, created_at, updated_at",
     )
     .eq("user_id", user.id)
     .eq("is_active", true)
@@ -69,6 +71,7 @@ export async function getMt5Connections(): Promise<Mt5ConnectionStatus[]> {
       account_balance: null,
       account_currency: null,
       account_equity: null,
+      account_net_funding: null,
     }));
     error = fallbackResult.error;
   }

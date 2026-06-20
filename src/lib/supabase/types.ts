@@ -128,6 +128,7 @@ export type Mt5Connection = {
   account_balance: number | null;
   account_equity: number | null;
   account_currency: string | null;
+  account_net_funding: number | null;
   last_sync_at: string | null;
   is_active: boolean;
   created_at: string;
