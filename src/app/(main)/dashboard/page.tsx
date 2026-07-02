@@ -290,6 +290,199 @@ function getRulePressureSummary(trades: TradeWithAnalysis[]) {
   };
 }
 
+function roundNumber(value: number, digits = 2) {
+  return Number(value.toFixed(digits));
+}
+
+function getTradeRMultiple(trade: TradeWithAnalysis) {
+  if (trade.outcome === "breakeven") {
+    return 0;
+  }
+
+  if (trade.final_rr !== null) {
+    const finalRr = Math.abs(Number(trade.final_rr));
+    return trade.outcome === "loss" ? -finalRr : finalRr;
+  }
+
+  if (Number(trade.risk_percent ?? 0) > 0 && trade.profit_loss_percent !== null) {
+    return Number(trade.profit_loss_percent) / Number(trade.risk_percent);
+  }
+
+  if (trade.outcome === "win") {
+    return Math.max(0.1, Number(trade.rr ?? 1));
+  }
+
+  if (trade.outcome === "loss") {
+    return -1;
+  }
+
+  return 0;
+}
+
+function standardDeviation(values: number[]) {
+  if (values.length < 2) {
+    return 0;
+  }
+
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1);
+  return Math.sqrt(variance);
+}
+
+function getMaxDrawdownPercent(trades: TradeWithAnalysis[]) {
+  let peak = 0;
+  let cumulative = 0;
+  let maxDrawdown = 0;
+
+  for (const trade of [...trades].sort(
+    (left, right) => new Date(left.trade_taken_at).getTime() - new Date(right.trade_taken_at).getTime(),
+  )) {
+    cumulative += getTradeProfitPercent(trade);
+    peak = Math.max(peak, cumulative);
+    maxDrawdown = Math.max(maxDrawdown, peak - cumulative);
+  }
+
+  return -roundNumber(maxDrawdown);
+}
+
+function scoreProfitFactor(value: number | null, closedTrades: number) {
+  if (!closedTrades) {
+    return 0;
+  }
+
+  if (value === null) {
+    return 100;
+  }
+
+  return clamp(30 + value * 28);
+}
+
+function scoreExpectancy(value: number, closedTrades: number) {
+  if (!closedTrades) {
+    return 0;
+  }
+
+  return clamp(50 + value * 55);
+}
+
+function scoreSharpe(value: number, closedTrades: number) {
+  if (closedTrades < 3) {
+    return closedTrades ? 55 : 0;
+  }
+
+  return clamp(45 + value * 22);
+}
+
+function scoreDrawdown(value: number, plan: PerformancePlan, closedTrades: number) {
+  if (!closedTrades) {
+    return 0;
+  }
+
+  const drawdown = Math.abs(value);
+  const limit = plan.max_monthly_loss_percent || 5;
+
+  return clamp(100 - (drawdown / limit) * 45);
+}
+
+function getScoreTone(score: number): "danger" | "healthy" | "neutral" | "warning" {
+  if (score >= 75) {
+    return "healthy";
+  }
+
+  if (score >= 55) {
+    return "neutral";
+  }
+
+  if (score >= 35) {
+    return "warning";
+  }
+
+  return "danger";
+}
+
+function getPerformanceScorecard(
+  monthTrades: TradeWithAnalysis[],
+  closedTrades: TradeWithAnalysis[],
+  plan: PerformancePlan,
+) {
+  const rReturns = closedTrades.map(getTradeRMultiple);
+  const averageR = rReturns.length ? rReturns.reduce((sum, value) => sum + value, 0) / rReturns.length : 0;
+  const rDeviation = standardDeviation(rReturns);
+  const sharpeRatio =
+    rReturns.length < 2
+      ? 0
+      : rDeviation === 0
+        ? averageR > 0
+          ? 3
+          : 0
+        : (averageR / rDeviation) * Math.sqrt(rReturns.length);
+  const grossWins = closedTrades
+    .filter((trade) => Number(trade.profit_loss_amount ?? 0) > 0)
+    .reduce((sum, trade) => sum + Number(trade.profit_loss_amount ?? 0), 0);
+  const grossLosses = Math.abs(
+    closedTrades
+      .filter((trade) => Number(trade.profit_loss_amount ?? 0) < 0)
+      .reduce((sum, trade) => sum + Number(trade.profit_loss_amount ?? 0), 0),
+  );
+  const profitFactor = grossLosses > 0 ? grossWins / grossLosses : grossWins > 0 ? null : 0;
+  const maxDrawdown = getMaxDrawdownPercent(closedTrades);
+  const reviewedTrades = monthTrades.filter((trade) => trade.review_status === "reviewed");
+  const reviewCompletion = monthTrades.length ? Math.round((reviewedTrades.length / monthTrades.length) * 100) : 0;
+  const rawDisciplineScore = monthTrades.length ? average(monthTrades.map(getTradeIntelligenceScore)) : 0;
+  const reviewConfidenceMultiplier = 0.45 + (reviewCompletion / 100) * 0.55;
+  const disciplineScore = Math.round(rawDisciplineScore * reviewConfidenceMultiplier);
+  const profitFactorScore = scoreProfitFactor(profitFactor, closedTrades.length);
+  const expectancyScore = scoreExpectancy(averageR, closedTrades.length);
+  const sharpeScore = scoreSharpe(sharpeRatio, closedTrades.length);
+  const drawdownScore = scoreDrawdown(maxDrawdown, plan, closedTrades.length);
+  const overallScore = weightedAverage([
+    { score: Math.round((profitFactorScore + expectancyScore) / 2), weight: 34 },
+    { score: drawdownScore, weight: 20 },
+    { score: sharpeScore, weight: 20 },
+    { score: disciplineScore, weight: 26 },
+  ]);
+  const confidence =
+    reviewCompletion >= plan.min_review_completion_percent ? "High" : reviewCompletion >= 35 ? "Medium" : "Low";
+  const grade =
+    overallScore >= 85
+      ? "Elite"
+      : overallScore >= 72
+        ? "Strong"
+        : overallScore >= 55
+          ? "Developing"
+          : overallScore >= 35
+            ? "Fragile"
+            : "Unproven";
+  const headline =
+    confidence === "Low" && monthTrades.length
+      ? "Performance needs review context."
+      : overallScore >= 72
+        ? "Edge quality is holding up."
+        : overallScore >= 55
+          ? "Performance is usable, but not durable yet."
+          : "Protect capital before judging the edge.";
+
+  return {
+    confidence,
+    drawdownScore,
+    expectancyR: roundNumber(averageR),
+    expectancyScore,
+    grade,
+    headline,
+    maxDrawdown,
+    overallScore,
+    profitFactor: profitFactor === null ? null : roundNumber(profitFactor),
+    profitFactorScore,
+    reviewedTrades: reviewedTrades.length,
+    sharpeRatio: roundNumber(sharpeRatio),
+    sharpeScore,
+    disciplineScore,
+    rawDisciplineScore,
+    reviewCompletion,
+    totalTrades: monthTrades.length,
+  };
+}
+
 function getLosingStreak(trades: TradeWithAnalysis[]) {
   let streak = 0;
 
@@ -396,6 +589,7 @@ function getMonthlyPerformanceModel(trades: TradeWithAnalysis[], plan: Performan
   const worstPair = [...pairPerformance].sort((left, right) => left.profit - right.profit)[0];
   const reviewedTrades = monthTrades.filter((trade) => trade.review_status === "reviewed").length;
   const reviewRequiredCount = Math.max(0, monthTrades.length - reviewedTrades);
+  const performanceScorecard = getPerformanceScorecard(monthTrades, closedTrades, plan);
   const safeRemainingRiskPercent = Number(
     Math.max(0, plan.max_monthly_loss_percent - Math.abs(Math.min(profitPercent, 0))).toFixed(2),
   );
@@ -477,6 +671,7 @@ function getMonthlyPerformanceModel(trades: TradeWithAnalysis[], plan: Performan
     openTrades,
     pairPerformance,
     pairDiagnosis,
+    performanceScorecard,
     plan,
     planRiskReasons,
     performanceCause,
@@ -953,7 +1148,9 @@ function DailySnapshotHero({
             />
           </div>
 
-          <div className="mt-auto grid gap-3 sm:grid-cols-2">
+          <PerformanceScorecard scorecard={monthlyPerformance.performanceScorecard} />
+
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-border/70 bg-background/35 p-4 backdrop-blur">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -1760,6 +1957,113 @@ function EmptyDashboardState({ hasConnections }: { hasConnections: boolean }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function PerformanceScorecard({
+  scorecard,
+}: {
+  scorecard: ReturnType<typeof getMonthlyPerformanceModel>["performanceScorecard"];
+}) {
+  const scoreTone = getScoreTone(scorecard.overallScore);
+  const confidenceTone =
+    scorecard.confidence === "High" ? "healthy" : scorecard.confidence === "Medium" ? "neutral" : "warning";
+
+  return (
+    <div className="rounded-3xl border border-primary/20 bg-[radial-gradient(circle_at_top_right,rgb(94_234_212/0.12),transparent_34%),linear-gradient(135deg,rgb(124_92_255/0.13),rgb(10_10_11/0.22))] p-4 shadow-[0_0_60px_rgb(124_92_255/0.10)]">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="rounded-full border-primary/30 bg-primary/10 text-primary">
+              Performance score
+            </Badge>
+            <Badge className={getStatusClass(scoreTone)}>{scorecard.grade}</Badge>
+            <Badge className={getStatusClass(confidenceTone)}>{scorecard.confidence} confidence</Badge>
+          </div>
+          <div className="mt-3 max-w-md font-semibold text-xl tracking-tight">{scorecard.headline}</div>
+          <p className="mt-1 max-w-md text-muted-foreground text-xs">
+            Edge, risk, consistency, and discipline are scored together so profit never hides poor execution quality.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-3xl border border-primary/25 bg-background/45 p-3">
+          <div className="relative flex size-24 items-center justify-center rounded-full border border-primary/30 bg-primary/10 shadow-[0_0_50px_rgb(124_92_255/0.20)]">
+            <div className="font-semibold text-3xl">{scorecard.overallScore}</div>
+            <div className="absolute bottom-5 text-[10px] text-muted-foreground">/100</div>
+          </div>
+          <div className="hidden min-w-24 text-xs sm:block">
+            <div className="text-muted-foreground">Reviewed</div>
+            <div className="mt-1 font-semibold text-lg">
+              {scorecard.reviewedTrades}/{scorecard.totalTrades}
+            </div>
+            <div className="text-muted-foreground">trades this month</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+        <PerformanceScoreRow
+          label="Sharpe-style"
+          score={scorecard.sharpeScore}
+          value={scorecard.totalTrades ? scorecard.sharpeRatio.toFixed(2) : "Waiting"}
+        />
+        <PerformanceScoreRow
+          label="Profit factor"
+          score={scorecard.profitFactorScore}
+          value={
+            scorecard.totalTrades
+              ? scorecard.profitFactor === null
+                ? "No losses"
+                : scorecard.profitFactor.toFixed(2)
+              : "Waiting"
+          }
+        />
+        <PerformanceScoreRow
+          label="Expectancy"
+          score={scorecard.expectancyScore}
+          value={
+            scorecard.totalTrades
+              ? `${scorecard.expectancyR > 0 ? "+" : ""}${scorecard.expectancyR.toFixed(2)}R`
+              : "Waiting"
+          }
+        />
+        <PerformanceScoreRow
+          label="Max drawdown"
+          score={scorecard.drawdownScore}
+          value={scorecard.totalTrades ? `${scorecard.maxDrawdown.toFixed(2)}%` : "Waiting"}
+        />
+        <PerformanceScoreRow
+          label="Discipline"
+          score={scorecard.disciplineScore}
+          value={scorecard.totalTrades ? `${scorecard.rawDisciplineScore}/100` : "Waiting"}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PerformanceScoreRow({ label, score, value }: { label: string; score: number; value: string }) {
+  const tone = getScoreTone(score);
+
+  return (
+    <div className="rounded-2xl border border-border/70 bg-background/35 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[11px] text-muted-foreground">{label}</div>
+        <span
+          className={`size-2.5 rounded-full ${
+            tone === "healthy"
+              ? "bg-[#22C55E] shadow-[0_0_14px_rgb(34_197_94/0.55)]"
+              : tone === "warning"
+                ? "bg-[#F59E0B] shadow-[0_0_14px_rgb(245_158_11/0.45)]"
+                : tone === "danger"
+                  ? "bg-destructive shadow-[0_0_14px_rgb(239_68_68/0.45)]"
+                  : "bg-primary shadow-[0_0_14px_rgb(124_92_255/0.45)]"
+          }`}
+        />
+      </div>
+      <div className="mt-1 font-semibold text-base">{value}</div>
+      <Progress value={score} className="mt-2 h-1" />
+    </div>
   );
 }
 
